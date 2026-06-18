@@ -3,9 +3,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/read.hpp>
 #include <ranges>
-#include <algorithm>
 #include <boost/asio/connect.hpp>
-#include <boost/asio/write.hpp>
 
 #include "logger.h"
 #include "socks5.h"
@@ -277,7 +275,6 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
         co_return false;
     }
     auto endpoints = results.value();
-    boost::cobalt::io::endpoint ep;
     auto [connect_ec, endpoint] = co_await boost::cobalt::as_tuple(upstream_connection_.connect(endpoints));
 
     if (connect_ec) {
@@ -310,6 +307,7 @@ boost::cobalt::promise<bool> session::connect_to_remote(const boost::cobalt::io:
         cancel();
         co_return false;
     }
+    co_return true;
 }
 
 boost::cobalt::promise<bool> session::request() {
@@ -359,11 +357,11 @@ boost::cobalt::promise<bool> session::handshake() {
 }
 
 
-boost::cobalt::promise<boost::system::error_code> session::ensure_bytes(std::size_t nbytes) {
-    if (client_buffer_.size() >= nbytes)
+boost::cobalt::promise<boost::system::error_code> session::ensure_bytes(const std::size_t full_request_size) {
+    if (client_buffer_.size() >= full_request_size)
         co_return {};
 
-    const auto missing = nbytes - client_buffer_.size();
+    const auto missing = full_request_size - client_buffer_.size();
 
     auto [ec, n] = co_await asio_coro_utils::help_socket_reader(client_connection_,
         client_buffer_, missing);

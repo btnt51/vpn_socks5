@@ -75,9 +75,8 @@ target_link_libraries(
         PRIVATE
         Boost::asio
         Boost::beast
-        Boost::cobalt
+        Boost::cobalt::io
         Boost::program_options
-        fmt::fmt
         spdlog::spdlog
         Threads::Threads
 )

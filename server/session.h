@@ -53,11 +53,11 @@ private:
     boost::cobalt::promise<std::optional<socks5::command_request>> get_command_request();
 
     boost::cobalt::promise<bool> resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint);
-    boost::cobalt::promise<bool> connect_to_remote(const boost::cobalt::io::endpoint& domain_endpoint);
+    boost::cobalt::promise<bool> connect_to_remote(const boost::cobalt::io::endpoint& endpoint);
 
     boost::cobalt::promise<bool> request();
     boost::cobalt::promise<std::expected<boost::cobalt::io::endpoint_sequence, boost::system::error_code>> resolve(std::string_view host, std::string_view port);
-    boost::cobalt::promise<boost::system::error_code> ensure_bytes(std::size_t nbytes);
+    boost::cobalt::promise<boost::system::error_code> ensure_bytes(std::size_t full_request_size);
 
     void close_socket(std::string_view socket_name, boost::asio::ip::tcp::socket& socket) const;
     void close_socket(std::string_view socket_name, boost::cobalt::io::stream_socket& socket) const;
