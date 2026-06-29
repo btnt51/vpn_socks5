@@ -27,7 +27,7 @@ public:
     template <typename... Args>
     void log(const std::string& module_name, logger_levels log_level, fmt::format_string<Args...> fmt, Args&&... args);
 
-    ~logger();
+    void shutdown();
 
 private:
     std::unordered_map<std::string,std::shared_ptr<spdlog::async_logger>> loggers;
@@ -46,5 +46,7 @@ void logger::log(const std::string& module_name, logger_levels log_level, fmt::f
 
 inline logger g_logger{};
 
+void init_logger(const std::vector<std::string> &module_names);
+void shutdown_logger();
 
 #endif //VPN_LOGGER_H

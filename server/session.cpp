@@ -274,7 +274,7 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
         cancel();
         co_return false;
     }
-    auto endpoints = results.value();
+    const auto& endpoints = results.value();
     auto [connect_ec, endpoint] = co_await boost::cobalt::as_tuple(upstream_connection_.connect(endpoints));
 
     if (connect_ec) {

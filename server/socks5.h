@@ -58,6 +58,7 @@ struct auth_req {
 };
 
 struct domain_endpoint {
+    domain_endpoint(const std::string& name, std::uint16_t port) : host{name}, port{port} {};
     std::string host;
     std::uint16_t port;
 };

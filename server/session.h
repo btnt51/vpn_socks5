@@ -35,7 +35,7 @@ static uint64_t generate_session_id() {
 
 class session : public std::enable_shared_from_this<session> {
 public:
-    session(boost::asio::any_io_executor io_executor, boost::asio::ip::tcp::socket&& socket) : session_id_{generate_session_id()},
+    session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket) : session_id_{generate_session_id()},
         executor_{std::move(io_executor)}, client_connection_{std::move(socket)}, upstream_connection_(executor_), resolver_ {executor_} {
         set_session_state(session_states::e_started);
     }
@@ -64,7 +64,7 @@ private:
     void log_close_error(std::string_view socket_name, std::string_view operation, std::string_view endpoint, const boost::system::error_code& ec) const;
     void set_session_state(session_states state);
 
-    boost::asio::ip::tcp::socket client_connection_;
+    boost::cobalt::io::stream_socket client_connection_;
     boost::cobalt::io::stream_socket upstream_connection_;
     boost::asio::streambuf client_buffer_;
     boost::asio::streambuf upstream_buffer_;

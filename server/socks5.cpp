@@ -161,7 +161,7 @@ socks5::parse_result<socks5::command_request> socks5::parse_connection_req(std::
         auto port_offset = 5 + domain_length;
         std::uint16_t port = (static_cast<std::uint16_t>(req[port_offset]) << 8) | static_cast<std::uint16_t>(req[port_offset + 1]);
 
-        res.request.target.emplace<socks5::domain_endpoint>(socks5::domain_endpoint{std::move(domain), port});
+        res.request.target.emplace<socks5::domain_endpoint>(std::move(domain), port);
         res.consumed = 5 + domain_length + 2;
         res.reply_code = reply_code::succeeded;
         res.status = parse_status::ok;
