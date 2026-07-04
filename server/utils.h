@@ -20,6 +20,13 @@ inline boost::cobalt::promise<std::tuple<boost::system::error_code, std::size_t>
     co_return {ec, bytes_read};
 }
 
+inline boost::cobalt::promise<std::tuple<boost::system::error_code, std::size_t>> help_socket_reader_some(boost::cobalt::io::stream_socket& socket, boost::asio::streambuf& buffer) {
+    auto prepared = buffer.prepare(1024);
+    auto [ec, bytes_read] = co_await boost::cobalt::as_tuple(socket.read_some(prepared));
+    buffer.commit(bytes_read);
+    co_return {ec, bytes_read};
+}
+
 inline boost::cobalt::promise<std::tuple<boost::system::error_code, std::size_t>> help_socket_writer(boost::cobalt::io::stream_socket& socket,std::span<const std::uint8_t> message) {
     co_return co_await boost::cobalt::as_tuple(
         boost::cobalt::io::write(socket, boost::cobalt::io::buffer(message))

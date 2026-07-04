@@ -12,7 +12,7 @@ class session;
 
 class server {
 public:
-    server(boost::asio::any_io_executor io_context);
+    server(boost::cobalt::executor io_context);
 
     ~server();
 
@@ -20,7 +20,7 @@ public:
 
     void cancel();
 private:
-    boost::asio::any_io_executor io_context_;
+    boost::cobalt::executor io_context_;
     std::optional<boost::cobalt::io::acceptor> acceptor_;
     std::vector<std::shared_ptr<session>> sessions_;
     bool stopping_{false};

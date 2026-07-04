@@ -2,6 +2,7 @@
 
 #include <boost/cobalt/run.hpp>
 #include <boost/cobalt/task.hpp>
+#include <boost/cobalt/this_thread.hpp>
 #include "boost/asio/co_spawn.hpp"
 #include "boost/asio/detached.hpp"
 #include "server/logger.h"
@@ -16,12 +17,16 @@ int main(int argc, char** argv) {
     auto exit_code = 0;
     {
         boost::asio::io_context io_service;
-        server server(io_service.get_executor());
+        boost::cobalt::this_thread::set_executor(io_service.get_executor());
+
+        server server(boost::cobalt::this_thread::get_executor());
         std::exception_ptr failure;
-        boost::cobalt::spawn(
-            io_service,
-            server.accept(),
-            boost::asio::detached);
+        boost::cobalt::spawn(boost::cobalt::this_thread::get_executor(),server.accept(),[&](std::exception_ptr ep) {
+            failure = ep;
+            if (ep) {
+                io_service.stop();
+            }
+        });
 
         io_service.run();
 

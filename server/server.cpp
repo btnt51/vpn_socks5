@@ -1,12 +1,14 @@
 #include "server.h"
 
+#include <iostream>
+
 #include "logger.h"
 #include "session.h"
 
 #include <boost/cobalt/spawn.hpp>
 
 
-server::server(boost::asio::any_io_executor io_context)
+server::server(boost::cobalt::executor io_context)
     : io_context_(std::move(io_context)),
       acceptor_(
           std::in_place,
@@ -32,7 +34,6 @@ boost::cobalt::task<void>server::accept() {
                 "Could not accept connection from acceptor with error: {}" ,error.message());
             continue;
         }
-
         auto session = std::make_shared<class session>(io_context_, std::move(socket));
         boost::cobalt::spawn(io_context_, session->run(), [session](std::exception_ptr ep) {
             if (ep) {

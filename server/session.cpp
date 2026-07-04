@@ -8,8 +8,9 @@
 #include "logger.h"
 #include "socks5.h"
 #include "utils.h"
-#include "boost/cobalt/io/socket.hpp"
-#include "boost/cobalt/io/endpoint.hpp"
+#include <boost/cobalt/io/socket.hpp>
+#include <boost/cobalt/gather.hpp>
+#include <boost/cobalt/io/endpoint.hpp>
 
 std::string_view session_state_to_string(session_states state) {
     using std::string_view_literals::operator ""sv;
@@ -38,7 +39,56 @@ std::string_view session_state_to_string(session_states state) {
 }
 
 boost::cobalt::promise<bool> session::relay() {
+    co_await boost::cobalt::gather(client_to_upstream(), upstream_to_client());
     co_return true;
+}
+
+boost::cobalt::promise<void> session::client_to_upstream() {
+    for (;;) {
+        if (stopping_) {
+            co_return;
+        }
+        auto [ec, read_bytes] = co_await asio_coro_utils::help_socket_reader_some(client_connection_, client_buffer_);
+        if (ec) {
+            g_logger.log("session", logger_levels::e_warning,
+                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, ec.message());
+            cancel();
+            co_return;
+        }
+        auto [write_ec, bytes_written] = co_await boost::cobalt::as_tuple(boost::cobalt::io::write(upstream_connection_, client_buffer_.data()));
+        client_buffer_.consume(bytes_written);
+
+        if (write_ec) {
+            g_logger.log("session", logger_levels::e_warning,
+                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, write_ec.message());
+            cancel();
+            co_return;
+        }
+    }
+}
+
+boost::cobalt::promise<void> session::upstream_to_client() {
+    for (;;) {
+        if (stopping_) {
+            co_return;
+        }
+        auto [ec, read_bytes] = co_await asio_coro_utils::help_socket_reader_some(upstream_connection_, upstream_buffer_);
+        if (ec) {
+            g_logger.log("session", logger_levels::e_warning,
+                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, ec.message());
+            cancel();
+            co_return;
+        }
+        auto [write_ec, bytes_written] = co_await boost::cobalt::as_tuple(boost::cobalt::io::write(client_connection_, upstream_buffer_.data()));
+        upstream_buffer_.consume(bytes_written);
+
+        if (write_ec) {
+            g_logger.log("session", logger_levels::e_warning,
+                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, write_ec.message());
+            cancel();
+            co_return;
+        }
+    }
 }
 
 boost::cobalt::task<void> session::run() {
@@ -263,7 +313,8 @@ boost::cobalt::promise<std::optional<socks5::command_request>> session::get_comm
 boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint) {
     set_session_state(session_states::e_resolve);
     auto results = co_await resolve(domain_endpoint.host, std::to_string(domain_endpoint.port));
-    if (auto err = results.error(); not results) {
+    if (not results) {
+        auto err = results.error();
         auto response = socks5::build_failed_command_response(socks5::to_reply_code(err));
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
@@ -288,7 +339,18 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
         cancel();
         co_return false;
     }
-    co_return false;
+
+    auto response = socks5::build_failed_command_response(socks5::reply_code::succeeded);
+    auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
+    if (write_ec) {
+        g_logger.log("session", logger_levels::e_warning,
+                     "session id: {} error while sending SOCKS5 command response: {}",
+                     session_id_, write_ec.message());
+        cancel();
+        co_return false;
+    }
+
+    co_return true;
 }
 
 boost::cobalt::promise<bool> session::connect_to_remote(const boost::cobalt::io::endpoint& endpoint) {
@@ -307,6 +369,17 @@ boost::cobalt::promise<bool> session::connect_to_remote(const boost::cobalt::io:
         cancel();
         co_return false;
     }
+
+    auto response = socks5::build_failed_command_response(socks5::reply_code::succeeded);
+    auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
+    if (write_ec) {
+        g_logger.log("session", logger_levels::e_warning,
+                     "session id: {} error while sending SOCKS5 command response: {}",
+                     session_id_, write_ec.message());
+        cancel();
+        co_return false;
+    }
+
     co_return true;
 }
 

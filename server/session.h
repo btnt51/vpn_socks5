@@ -35,12 +35,11 @@ static uint64_t generate_session_id() {
 
 class session : public std::enable_shared_from_this<session> {
 public:
-    session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket) : session_id_{generate_session_id()},
-        executor_{std::move(io_executor)}, client_connection_{std::move(socket)}, upstream_connection_(executor_), resolver_ {executor_} {
+    session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket)
+        : executor_{std::move(io_executor)}, client_connection_{std::move(socket)}, upstream_connection_{executor_},
+          resolver_{executor_},session_id_{generate_session_id()} {
         set_session_state(session_states::e_started);
     }
-
-    boost::cobalt::promise<bool> relay();
 
     boost::cobalt::task<void> run();
     void cancel();
@@ -64,12 +63,17 @@ private:
     void log_close_error(std::string_view socket_name, std::string_view operation, std::string_view endpoint, const boost::system::error_code& ec) const;
     void set_session_state(session_states state);
 
+    boost::cobalt::promise<bool> relay();
+
+    boost::cobalt::promise<void> client_to_upstream();
+    boost::cobalt::promise<void> upstream_to_client();
+
+    boost::cobalt::executor executor_;
     boost::cobalt::io::stream_socket client_connection_;
     boost::cobalt::io::stream_socket upstream_connection_;
+    boost::cobalt::io::resolver resolver_;
     boost::asio::streambuf client_buffer_;
     boost::asio::streambuf upstream_buffer_;
-    boost::asio::any_io_executor executor_;
-    boost::cobalt::io::resolver resolver_;
     uint64_t session_id_;
     session_states state_{session_states::e_none};
     bool stopping_{false};
