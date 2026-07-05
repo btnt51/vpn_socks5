@@ -1,5 +1,6 @@
 #ifndef VPN_SESSION_H
 #define VPN_SESSION_H
+#include <expected>
 #include <memory>
 #include <utility>
 #include <span>
@@ -49,9 +50,16 @@ private:
     boost::cobalt::promise<std::optional<socks5::auth_method>> negotiate_step();
     boost::cobalt::promise<bool> authentication_step();
 
+    boost::cobalt::promise<void> handle_socks5_command_request_error(const socks5::parse_result<socks5::command_request>& request);
+
     boost::cobalt::promise<std::optional<socks5::command_request>> get_command_request();
 
+    boost::cobalt::promise<bool> send_success_socks5_connect();
+
     boost::cobalt::promise<bool> resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint);
+
+    boost::cobalt::promise<void> handle_error_while_connecting_to_remote(const boost::system::error_code& connect_ec);
+
     boost::cobalt::promise<bool> connect_to_remote(const boost::cobalt::io::endpoint& endpoint);
 
     boost::cobalt::promise<bool> request();
@@ -74,6 +82,7 @@ private:
     boost::cobalt::io::resolver resolver_;
     boost::asio::streambuf client_buffer_;
     boost::asio::streambuf upstream_buffer_;
+    std::string username_{"unknown"};
     uint64_t session_id_;
     session_states state_{session_states::e_none};
     bool stopping_{false};

@@ -1,6 +1,9 @@
 #include "socks5.h"
 
 #include <algorithm>
+#include <cstring>
+
+#include "boost/cobalt/io/endpoint.hpp"
 
 socks5::reply_code socks5::to_reply_code(const boost::system::error_code &ec) {
     using boost::asio::error::connection_refused;
@@ -195,3 +198,31 @@ std::array<std::uint8_t, 10> socks5::build_failed_command_response(reply_code re
     return {0x05, static_cast<std::uint8_t>(reply_code),
         0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 }
+
+std::vector<std::uint8_t> socks5::build_success_command_response(reply_code reply_code,
+    const std::span<std::uint8_t, 4> &ip_v4_addr, uint16_t port) {
+
+    std::vector<std::uint8_t> res(10);
+    res[0] = 0x05;
+    res[1] = static_cast<std::uint8_t>(reply_code);
+    res[2] = 0x00;
+    res[3] = 0x01;
+    std::ranges::copy(ip_v4_addr, res.begin() + 4);
+    res[8] = static_cast<std::uint8_t>(port >> 8);
+    res[9] = static_cast<std::uint8_t>(port);
+    return res;
+}
+
+std::vector<std::uint8_t> socks5::build_success_command_response(reply_code reply_code,
+    const std::span<std::uint8_t, 16> &ip_v6_addr, uint16_t port) {
+    std::vector<std::uint8_t> res(22);
+    res[0] = 0x05;
+    res[1] = static_cast<std::uint8_t>(reply_code);
+    res[2] = 0x00;
+    res[3] = 0x04;
+    std::ranges::copy(ip_v6_addr, res.begin() + 4);
+    res[20] = static_cast<std::uint8_t>(port >> 8);
+    res[21] = static_cast<std::uint8_t>(port);
+    return res;
+}
+

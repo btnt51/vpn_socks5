@@ -14,6 +14,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(VPN_BUILD_TESTS "Build vpn tests" ON)
+
 include(FetchContent)
 
 set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps")
@@ -30,6 +32,8 @@ set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 set(SPDLOG_FMT_EXTERNAL ON CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 
 if(UNIX AND NOT APPLE)
     add_compile_definitions(BOOST_ASIO_DISABLE_IO_URING)
@@ -51,6 +55,13 @@ FetchContent_Declare(
         spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
         GIT_TAG v1.15.3
+        GIT_SHALLOW TRUE
+)
+
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.17.0
         GIT_SHALLOW TRUE
 )
 
@@ -80,3 +91,25 @@ target_link_libraries(
         spdlog::spdlog
         Threads::Threads
 )
+
+if(VPN_BUILD_TESTS)
+    FetchContent_MakeAvailable(googletest)
+
+    enable_testing()
+
+    add_executable(vpn_socks5_tests
+            tests/socks5_tests.cpp
+            server/socks5.cpp
+            server/socks5.h
+    )
+    target_include_directories(vpn_socks5_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(
+            vpn_socks5_tests
+            PRIVATE
+            Boost::asio
+            GTest::gtest_main
+    )
+
+    include(GoogleTest)
+    gtest_discover_tests(vpn_socks5_tests)
+endif()

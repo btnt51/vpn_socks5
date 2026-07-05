@@ -1,8 +1,11 @@
 #ifndef VPN_SOCKS5_H
 #define VPN_SOCKS5_H
+#include <array>
+#include <cstdint>
 #include <string>
 #include <span>
-#include <expected>
+#include <variant>
+#include <vector>
 #include <boost/asio/ip/tcp.hpp>
 
 
@@ -94,6 +97,8 @@ parse_result<auth_req> parse_auth_req(std::span<uint8_t> req);
 parse_result<command_request> parse_connection_req(std::span<uint8_t> req);
 
 std::array<std::uint8_t, 10> build_failed_command_response(reply_code reply_code);
+std::vector<std::uint8_t> build_success_command_response(reply_code reply_code, const std::span<std::uint8_t, 4>& ip_v4_addr, uint16_t port);
+std::vector<std::uint8_t> build_success_command_response(reply_code reply_code, const std::span<std::uint8_t, 16>& ip_v6_addr, uint16_t port);
 }
 
 
