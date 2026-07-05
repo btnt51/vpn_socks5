@@ -44,6 +44,8 @@ public:
 
     boost::cobalt::task<void> run();
     void cancel();
+    uint64_t session_id() const;
+    std::string username() const;
 private:
     boost::cobalt::promise<bool> handshake();
 

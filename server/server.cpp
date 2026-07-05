@@ -35,6 +35,8 @@ boost::cobalt::task<void>server::accept() {
             continue;
         }
         auto session = std::make_shared<class session>(io_context_, std::move(socket));
+        g_logger.log("server", logger_levels::e_info,
+                "Accepting new session session id:{} username: {}", session->session_id(), session->username());
         boost::cobalt::spawn(io_context_, session->run(), [session](std::exception_ptr ep) {
             if (ep) {
                 // log crash
@@ -55,7 +57,8 @@ void server::cancel() {
     if (std::exchange(stopping_, true)) {
         return;
     }
-
+    g_logger.log("server", logger_levels::e_info,
+        "Stoped server");
     acceptor_.reset();
 
     for (const auto& session : sessions_) {

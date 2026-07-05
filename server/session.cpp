@@ -39,6 +39,8 @@ std::string_view session_state_to_string(session_states state) {
 }
 
 boost::cobalt::promise<bool> session::relay() {
+    g_logger.log("session", logger_levels::e_info,
+        "session id: {} username: {} starting relay", session_id_, username_);
     co_await boost::cobalt::gather(client_to_upstream(), upstream_to_client());
     co_return true;
 }
@@ -99,13 +101,13 @@ boost::cobalt::task<void> session::run() {
         cancel();
         co_return;
     }
+
     self->set_session_state(session_states::e_request);
     res = co_await request();
     if (not res) {
         cancel();
         co_return;
     }
-
 
     self->set_session_state(session_states::e_active);
     res = co_await relay();
@@ -138,6 +140,14 @@ void session::cancel() {
     close_socket("upstream", upstream_connection_);
 }
 
+uint64_t session::session_id() const {
+    return session_id_;
+}
+
+std::string session::username() const {
+    return username_;
+}
+
 void session::close_socket(std::string_view socket_name, boost::asio::ip::tcp::socket &socket) const {
     boost::system::error_code ec;
 
@@ -166,15 +176,7 @@ void session::close_socket(std::string_view socket_name, boost::cobalt::io::stre
         auto remote = socket.remote_endpoint();
 
         if (remote) {
-            if (auto ip = get_if<boost::cobalt::io::ip>(&*remote)) {
-                auto addr = ip->addr_str();
-
-                if (ip->is_ipv6()) {
-                    endpoint = fmt::format("[{}]:{}", addr.c_str(), ip->port());
-                } else {
-                    endpoint = fmt::format("{}:{}", addr.c_str(), ip->port());
-                }
-            }
+            endpoint = asio_coro_utils::format_endpoint(*remote);
         } else {
             log_close_error(socket_name, "remote_endpoint", endpoint, remote.error());
         }
@@ -264,9 +266,6 @@ boost::cobalt::promise<std::optional<socks5::auth_method>> session::negotiate_st
         co_return std::nullopt;
     }
 
-    g_logger.log("session", logger_levels::e_debug,
-        "session id: {} username: {} selected SOCKS5 auth method: {}", session_id_, username_, static_cast<std::uint8_t>(method));
-
     co_return method;
 }
 
@@ -284,13 +283,15 @@ boost::cobalt::promise<void> session::handle_socks5_command_request_error(const 
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
                          "session id: {} username: {} error while sending SOCKS5 command response: {}",
-                         session_id_, username_, write_ec.boost::system::error_code::message());
+                         session_id_, username_, write_ec.message());
         }
     }
 }
 
 boost::cobalt::promise<std::optional<socks5::command_request>> session::get_command_request() {
     socks5::parse_result<socks5::command_request> request;
+    g_logger.log("session", logger_levels::e_info,
+        "session id: {} username: {} getting socks5 command request", session_id_, username_);
     while (true) {
         std::vector<std::uint8_t> bytes(client_buffer_.size());
         boost::asio::buffer_copy(boost::asio::buffer(bytes), client_buffer_.data());
@@ -324,7 +325,7 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
-                         "session id: {} username: {} error while sending SOCKS5 command response: {}",
+                         "session id: {} username: {} error while sending failed SOCKS5 command response: {}",
                          session_id_, username_, write_ec.message());
         }
         cancel();
@@ -342,7 +343,7 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
-                         "session id: {} username: {} error while sending SOCKS5 command response: {}",
+                         "session id: {} username: {} error while sending success SOCKS5 command response: {}",
                          session_id_, username_, write_ec.message());
             cancel();
             co_return false;
@@ -350,7 +351,7 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
         co_return true;
     }
     g_logger.log("session", logger_levels::e_warning,
-                 "session id: {} username: {} error while sending SOCKS5 command response",
+                 "session id: {} username: {} upstream connection doesn`t have local endpoint",
                  session_id_, username_);
     cancel();
     co_return false;
@@ -358,14 +359,20 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
 
 boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint) {
     set_session_state(session_states::e_resolve);
+    g_logger.log("session", logger_levels::e_info,
+        "session id: {} username: {} trying to resolve domain_endpoint: {}",
+        session_id_, username_, domain_endpoint.host);
     auto results = co_await resolve(domain_endpoint.host, std::to_string(domain_endpoint.port));
     if (not results) {
         auto err = results.error();
+        g_logger.log("session", logger_levels::e_warning,
+            "session id: {} username: {} error while resolving domain_endpoint: {} error: {}",
+            session_id_, username_, domain_endpoint.host, err.message());
         auto response = socks5::build_failed_command_response(socks5::to_reply_code(err));
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
-                         "session id: {} username: {} error while sending SOCKS5 command response: {}",
+                         "session id: {} username: {} error while sending failed SOCKS5 command response: {}",
                          session_id_, username_, write_ec.message());
         }
         cancel();
@@ -375,16 +382,22 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
     auto [connect_ec, endpoint] = co_await boost::cobalt::as_tuple(upstream_connection_.connect(endpoints));
 
     if (connect_ec) {
+        g_logger.log("session", logger_levels::e_warning,
+            "session id: {} username: {} error while trying to connect domain_endpoint: {} error: {}",
+            session_id_, username_, domain_endpoint.host, connect_ec.message());
         auto response = socks5::build_failed_command_response(socks5::to_reply_code(connect_ec));
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
-                         "session id: {} username: {} error while sending SOCKS5 command response: {}",
+                         "session id: {} username: {} error while sending failed SOCKS5 command response: {}",
                          session_id_, username_, write_ec.message());
         }
         cancel();
         co_return false;
     }
+    g_logger.log("session", logger_levels::e_info,
+                 "session id: {} username: {} connected to remote endpoint: {}",
+                 session_id_, username_, asio_coro_utils::format_endpoint(endpoint));
 
     co_return co_await send_success_socks5_connect();
 }
@@ -397,18 +410,26 @@ boost::cobalt::promise<void> session::handle_error_while_connecting_to_remote(co
     auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
     if (write_ec) {
         g_logger.log("session", logger_levels::e_warning,
-                     "session id: {} username: {} error while sending SOCKS5 command response: {}",
+                     "session id: {} username: {} error while sending failed SOCKS5 command response: {}",
                      session_id_, username_, write_ec.message());
     }
     cancel();
 }
 
 boost::cobalt::promise<bool> session::connect_to_remote(const boost::cobalt::io::endpoint& endpoint) {
+    const auto remote_endpoint = asio_coro_utils::format_endpoint(endpoint);
+    g_logger.log("session", logger_levels::e_info,
+        "session id: {} username: {} connecting to remote endpoint: {}",
+        session_id_, username_, remote_endpoint);
+
     auto [connect_ec] = co_await boost::cobalt::as_tuple(upstream_connection_.connect(endpoint));
     if (connect_ec) {
         co_await handle_error_while_connecting_to_remote(connect_ec);
         co_return false;
     }
+    g_logger.log("session", logger_levels::e_info,
+        "session id: {} username: {} connected to remote endpoint: {}",
+        session_id_, username_, remote_endpoint);
 
     co_return co_await send_success_socks5_connect();
 }
@@ -444,6 +465,8 @@ boost::cobalt::promise<bool> session::handshake() {
     if (not method) {
         co_return false;
     }
+    g_logger.log("session", logger_levels::e_debug,
+        "session id: {} username: {} selected SOCKS5 auth method: {}", session_id_, username_, socks5::to_string(method.value()));
 
     switch (method.value()) {
         case socks5::auth_method::no_auth:

@@ -50,6 +50,19 @@ enum class auth_method : std::uint8_t {
     no_acceptable_methods = 0xFF,
 };
 
+constexpr std::string_view to_string(auth_method method) {
+    switch (method) {
+        case auth_method::no_auth:
+            return "no_auth";
+        case auth_method::username_password:
+            return "username_password";
+        case auth_method::no_acceptable_methods:
+            return "no_acceptable_methods";
+        default:
+            return "unknown";
+    }
+}
+
 
 struct negotiation_req {
     std::span<uint8_t> methods;

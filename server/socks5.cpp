@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cstring>
 
-#include "boost/cobalt/io/endpoint.hpp"
-
 socks5::reply_code socks5::to_reply_code(const boost::system::error_code &ec) {
     using boost::asio::error::connection_refused;
     using boost::asio::error::host_unreachable;
@@ -225,4 +223,3 @@ std::vector<std::uint8_t> socks5::build_success_command_response(reply_code repl
     res[21] = static_cast<std::uint8_t>(port);
     return res;
 }
-
