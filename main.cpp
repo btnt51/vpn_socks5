@@ -5,6 +5,7 @@
 #include <boost/cobalt/this_thread.hpp>
 #include "boost/asio/co_spawn.hpp"
 #include "boost/asio/detached.hpp"
+#include "server/config.h"
 #include "server/logger.h"
 #include "server/server.h"
 #include "spdlog/async.h"
@@ -12,7 +13,12 @@
 
 int main(int argc, char** argv) {
     spdlog::init_thread_pool(8192, 1);
-    init_logger({"server", "session"});
+    auto res = config::load_config_file("./config");
+    if (not res) {
+        std::cerr << "Failed to load config file: " << res.error() << std::endl;
+        return 1;
+    }
+    logger::init_logger(res.value());
 
     auto exit_code = 0;
     {
@@ -40,6 +46,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    shutdown_logger();
+    logger::shutdown_logger();
     return exit_code;
 }

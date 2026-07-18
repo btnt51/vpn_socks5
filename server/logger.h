@@ -2,6 +2,9 @@
 #define VPN_LOGGER_H
 
 #include <cassert>
+#include <filesystem>
+#include <map>
+#include <flat_map>
 #include <string>
 #include <unordered_map>
 
@@ -18,11 +21,28 @@ enum class logger_levels {
     e_warning = SPDLOG_LEVEL_WARN,
     e_error = SPDLOG_LEVEL_ERROR,
 };
-
+inline const std::flat_map<std::string_view, logger_levels> map_string_logger_level {
+    {"debug", logger_levels::e_debug},
+    {"info", logger_levels::e_info},
+    {"trace", logger_levels::e_trace},
+    {"warning", logger_levels::e_warning},
+    {"error", logger_levels::e_error},
+};
+logger_levels from_string(logger_levels log_level);
+namespace logger {
+struct logger_config {
+    std::string module_name;
+    std::string filename;
+    std::string pattern{"[%Y-%m-%d %H:%M:%S.%e] [%n] [%t] [%l] %v"};
+    std::string level;
+    int rotation_hour{12};
+    int rotation_minute{30};
+};
+using loggers_settings = std::vector<logger_config>;
 
 class logger {
 public:
-    void create_async_logger(std::string module_name, logger_levels log_level);
+    void create_async_logger(const logger_config &config);
 
     template <typename... Args>
     void log(const std::string& module_name, logger_levels log_level, fmt::format_string<Args...> fmt, Args&&... args);
@@ -44,9 +64,20 @@ void logger::log(const std::string& module_name, logger_levels log_level, fmt::f
     logger->log(static_cast<spdlog::level::level_enum>(log_level), std::forward<fmt::format_string<Args...>>(fmt), std::forward<Args>(args)...);
 }
 
-inline logger g_logger{};
 
-void init_logger(const std::vector<std::string> &module_names);
+void init_logger(const std::vector<logger_config>& configs);
 void shutdown_logger();
+}
 
+inline logger_levels from_string(std::string_view log_level) {
+    if (log_level.empty()) {
+        return logger_levels::e_debug;
+    }
+    if (not map_string_logger_level.contains(log_level)) {
+        return logger_levels::e_debug;
+    }
+    return map_string_logger_level.at(log_level);
+}
+
+inline logger::logger g_logger{};
 #endif //VPN_LOGGER_H

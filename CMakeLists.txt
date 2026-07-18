@@ -22,8 +22,9 @@ set(FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps")
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
-set(BOOST_INCLUDE_LIBRARIES cobalt asio beast program_options CACHE STRING "" FORCE)
+set(BOOST_INCLUDE_LIBRARIES cobalt asio beast program_options json CACHE STRING "" FORCE)
 set(BOOST_ENABLE_CMAKE ON CACHE BOOL "" FORCE)
 set(BOOST_SKIP_INSTALL_RULES ON CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -79,7 +80,9 @@ add_executable(vpn main.cpp
         server/logger.h
         server/socks5.cpp
         server/socks5.h
-        server/utils.h)
+        server/utils.h
+        server/config.cpp
+        server/config.h)
 add_custom_target(cobalt_vpn DEPENDS vpn)
 target_link_libraries(
         vpn
@@ -89,6 +92,7 @@ target_link_libraries(
         Boost::cobalt::io
         Boost::program_options
         spdlog::spdlog
+        Boost::json
         Threads::Threads
 )
 
@@ -107,6 +111,7 @@ if(VPN_BUILD_TESTS)
             vpn_socks5_tests
             PRIVATE
             Boost::asio
+            Boost::json
             GTest::gtest_main
     )
 
