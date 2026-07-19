@@ -28,7 +28,7 @@ inline const std::flat_map<std::string_view, logger_levels> map_string_logger_le
     {"warning", logger_levels::e_warning},
     {"error", logger_levels::e_error},
 };
-logger_levels from_string(logger_levels log_level);
+
 namespace logger {
 struct logger_config {
     std::string module_name;
