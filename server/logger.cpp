@@ -6,7 +6,7 @@
 #include <spdlog/sinks/daily_file_sink.h>
 
 void logger::logger::create_async_logger(const logger_config &config) {
-    auto sink = std::make_shared<spdlog::sinks::daily_file_format_sink_mt>(fmt::format("./logs/{}.log", config.module_name), config.rotation_hour,config.rotation_minute);
+    auto sink = std::make_shared<spdlog::sinks::daily_file_format_sink_mt>(fmt::format("./logs/{}", config.filename), config.rotation_hour, config.rotation_minute);
 
     auto logger = std::make_shared<spdlog::async_logger>(config.module_name, sink, spdlog::thread_pool(), spdlog::async_overflow_policy::overrun_oldest);
     logger->set_pattern(config.pattern);

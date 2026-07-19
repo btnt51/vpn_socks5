@@ -108,8 +108,10 @@ std::expected<void, std::string> validate_spdlog_pattern(std::string_view patter
     return {};
 }
 
-std::expected<boost::json::value, std::string> read_json_file(
-    const std::filesystem::path &config_file_path) {
+std::expected<boost::json::value, std::string> read_json_file(const std::filesystem::path &config_file_path) {
+    if (not std::filesystem::exists(config_file_path)) {
+        return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_file_path.string())};
+    }
     std::ifstream file(config_file_path.string(), std::ios::in);
     if (not file.is_open()) {
         return std::unexpected{fmt::format("Could not open config file `{}`", config_file_path.string())};
@@ -181,45 +183,53 @@ std::expected<logger::loggers_settings, std::string> parse_json(const boost::jso
     return boost::json::value_to<logger::loggers_settings>(object);
 }
 
+std::expected<void, std::string> validate_config_name(std::set<std::string_view>& duplicates_names,
+    std::set<std::string_view>& duplicates_files, const logger::logger_config &config) {
+
+    if (config.module_name.empty()) {
+        return std::unexpected{fmt::format("Module name must be not empty")};;
+    }
+    if (duplicates_names.contains(config.module_name)) {
+        return std::unexpected{fmt::format("'module_name' `{}` already exists", config.module_name)};;
+    }
+    duplicates_names.insert(config.module_name);
+    if (config.filename.empty()) {
+        return std::unexpected{"'filename' must be not empty"};
+    }
+    if (duplicates_files.contains(config.filename)) {
+        return std::unexpected{fmt::format("'filename' `{}` already exists at others logger settings", config.filename)};
+    }
+    duplicates_files.insert(config.filename);
+    if (config.pattern.empty()) {
+        return std::unexpected{"'pattern' must be not empty"};
+    }
+    if (auto res = validate_spdlog_pattern(config.pattern); not res) {
+        return std::unexpected{fmt::format("'pattern' has error: '{}'", res.error())};;
+    }
+    if (config.level.empty()) {
+        return std::unexpected{"'level' must be not empty"};
+    }
+    if (not map_string_logger_level.contains(config.level)) {
+        return std::unexpected{"'level' must bet one of {{'debug', 'info', 'trace', 'warning', 'error'}}"};
+    }
+    if (config.rotation_hour < 0 or config.rotation_hour > 23) {
+        return std::unexpected{"'rotation_hour' must be in range [0, 23]"};
+    }
+
+    if (config.rotation_minute < 0 or config.rotation_minute > 59) {
+        return std::unexpected{"'rotation_minute' must be in range [0, 59]"};
+    }
+    return {};
+}
+
 std::expected<void, std::string> validate(const logger::loggers_settings &configs) {
     std::set<std::string_view> duplicates_names;
     std::set<std::string_view> duplicates_files;
     int index = 0;
     for (const auto& config : configs) {
-        if (config.module_name.empty()) {
-            return std::unexpected{fmt::format("Module name must be not empty, check object at index: {}", index)};
+        if (auto validation = validate_config_name(duplicates_names, duplicates_files, config); not validation) {
+            return std::unexpected{fmt::format("[{}].{}", index, validation.error())};
         }
-        if (duplicates_names.contains(config.module_name)) {
-            return std::unexpected{fmt::format("Settings for logger `{}` already exists, check object at index: {}", config.module_name, index)};
-        }
-        duplicates_names.insert(config.module_name);
-        if (config.filename.empty()) {
-            return std::unexpected{fmt::format("Filename must be not empty for module: {}, check object at index: {}", config.module_name, index)};
-        }
-        if (duplicates_files.contains(config.filename)) {
-            return std::unexpected{fmt::format("Logger filename: `{}` already exists, check object at index: {}", config.filename, index)};
-        }
-        duplicates_files.insert(config.filename);
-        if (config.pattern.empty()) {
-            return std::unexpected{fmt::format("Pattern must be not empty for module: {}, check object at index: {}", config.module_name, index)};
-        }
-        if (auto res = validate_spdlog_pattern(config.pattern); not res) {
-            return std::unexpected{fmt::format("Pattern for module: {} has error: '{}', check object at index: {}", config.module_name, res.error(), index)};
-        }
-        if (config.level.empty()) {
-            return std::unexpected{fmt::format("Level must be not empty for module: {}, check object at index: {}", config.module_name, index)};
-        }
-        if (not map_string_logger_level.contains(config.level)) {
-            return std::unexpected{fmt::format("Level for module: {} must bet one of {{'debug', 'info', 'trace', 'warning', 'error'}}, check object at index: {}", config.module_name, index)};
-        }
-        if (config.rotation_hour < 0 or config.rotation_hour > 23) {
-            return std::unexpected{fmt::format("rotation_hour for module '{}' must be in range [0, 23], check object at index: {}", config.module_name, index)};
-        }
-
-        if (config.rotation_minute < 0 or config.rotation_minute > 59) {
-            return std::unexpected{fmt::format("rotation_minute for module '{}' must be in range [0, 59], check object at index: {}", config.module_name, index)};
-        }
-
         index++;
     }
     return {};
@@ -231,8 +241,7 @@ std::expected<logger::loggers_settings, std::string> validate_and_return(logger:
     });
 }
 
-std::expected<logger::loggers_settings, std::string> config::load_config_file(
-    const std::filesystem::path &config_folder_path) {
+std::expected<logger::loggers_settings, std::string> config::load_config_file(const std::filesystem::path &config_folder_path) {
     if (not std::filesystem::exists(config_folder_path)) {
         return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
     }
@@ -240,7 +249,6 @@ std::expected<logger::loggers_settings, std::string> config::load_config_file(
     if (not std::filesystem::exists(config_path)) {
         return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_path.string())};
     }
-
 
     return read_json_file(config_path).and_then([](const boost::json::value& json) {
         return parse_json(json);
