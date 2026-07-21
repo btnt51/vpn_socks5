@@ -175,12 +175,24 @@ std::expected<logger::logger_config, std::string> parse_and_validate_json_logger
 }
 
 std::expected<logger::loggers_settings, std::string> parse_json(const boost::json::value &object) {
-    if (not object.is_array()) {
-        return std::unexpected{"Root of config's settings must be an array"};
+    if (not object.is_object()) {
+        return std::unexpected{"Root of config must be an object"};
     }
+
+    const auto& root_object = object.as_object();
+    const auto* loggers_value = root_object.if_contains("loggers");
+
+    if (loggers_value == nullptr) {
+        return std::unexpected{"Required field '$.loggers' is missing"};
+    }
+
+    if (not loggers_value->is_array()) {
+        return std::unexpected{"'$.loggers' must be an array"};
+    }
+
+    const auto& array = loggers_value->as_array();
     logger::loggers_settings loggers_settings;
-    loggers_settings.reserve(object.as_array().size());
-    const auto& array = object.as_array();
+    loggers_settings.reserve(array.size());
     for (std::size_t index = 0; index < array.size(); ++index) {
         auto config = parse_and_validate_json_logger_config_object(array[index]);
         if (not config) {
@@ -251,7 +263,7 @@ std::expected<void, std::string> validate(const logger::loggers_settings &config
 }
 
 std::expected<logger::loggers_settings, std::string> validate_and_return(logger::loggers_settings configs) {
-    return validate(configs).transform([configs = std::move(configs)]() mutable {
+    return validate(configs).transform([configs = std::move(configs)] mutable -> logger::loggers_settings {
         return std::move(configs);
     });
 }

@@ -23,6 +23,7 @@ void logger::logger::shutdown() {
 }
 
 void logger::init_logger(const std::vector<logger_config>& configs) {
+    spdlog::flush_every(std::chrono::seconds(15));
     for (const auto& config : configs) {
         g_logger.create_async_logger(config);
     }

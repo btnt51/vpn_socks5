@@ -3,7 +3,6 @@
 #include <expected>
 #include <memory>
 #include <utility>
-#include <span>
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/streambuf.hpp>
@@ -77,6 +76,8 @@ private:
 
     boost::cobalt::promise<void> client_to_upstream();
     boost::cobalt::promise<void> upstream_to_client();
+
+    bool is_expected_disconnect(const boost::system::error_code& ec) const;
 
     boost::cobalt::executor executor_;
     boost::cobalt::io::stream_socket client_connection_;

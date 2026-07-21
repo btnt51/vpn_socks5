@@ -52,8 +52,9 @@ boost::cobalt::promise<void> session::client_to_upstream() {
         }
         auto [ec, read_bytes] = co_await asio_coro_utils::help_socket_reader_some(client_connection_, client_buffer_);
         if (ec) {
-            g_logger.log("session", logger_levels::e_warning,
-                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, ec.message());
+            const auto level = is_expected_disconnect(ec) ? logger_levels::e_debug : logger_levels::e_warning;
+            g_logger.log("session", level,
+                "session id: {} username: {} error while reading from client (client_to_upstream): {}", session_id_, username_, ec.message());
             cancel();
             co_return;
         }
@@ -61,8 +62,9 @@ boost::cobalt::promise<void> session::client_to_upstream() {
         client_buffer_.consume(bytes_written);
 
         if (write_ec) {
-            g_logger.log("session", logger_levels::e_warning,
-                "session id: {} error while reading SOCKS5 negotiation: {}", session_id_, write_ec.message());
+            const auto level = is_expected_disconnect(write_ec) ? logger_levels::e_debug : logger_levels::e_warning;
+            g_logger.log("session", level,
+                "session id: {} username: {} error while sending from client to upstream (client_to_upstream): {}", session_id_, username_, write_ec.message());
             cancel();
             co_return;
         }
@@ -76,8 +78,9 @@ boost::cobalt::promise<void> session::upstream_to_client() {
         }
         auto [ec, read_bytes] = co_await asio_coro_utils::help_socket_reader_some(upstream_connection_, upstream_buffer_);
         if (ec) {
-            g_logger.log("session", logger_levels::e_warning,
-                "session id: {} username: {} error while reading SOCKS5 negotiation: {}", session_id_, username_, ec.message());
+            const auto level = is_expected_disconnect(ec) ? logger_levels::e_debug : logger_levels::e_warning;
+            g_logger.log("session", level,
+                "session id: {} username: {} error while reading from upstream (upstream_to_client): {}", session_id_, username_, ec.message());
             cancel();
             co_return;
         }
@@ -85,12 +88,17 @@ boost::cobalt::promise<void> session::upstream_to_client() {
         upstream_buffer_.consume(bytes_written);
 
         if (write_ec) {
-            g_logger.log("session", logger_levels::e_warning,
-                "session id: {} username: {} error while reading SOCKS5 negotiation: {}", session_id_, username_, write_ec.message());
+            const auto level = is_expected_disconnect(write_ec) ? logger_levels::e_debug : logger_levels::e_warning;
+            g_logger.log("session", level,
+                "session id: {} username: {} error while sending from upstream to client (upstream_to_client): {}", session_id_, username_, write_ec.message());
             cancel();
             co_return;
         }
     }
+}
+
+bool session::is_expected_disconnect(const boost::system::error_code &ec) const {
+    return ec == boost::asio::error::eof or (stopping_ and ec == boost::asio::error::operation_aborted);
 }
 
 boost::cobalt::task<void> session::run() {
@@ -173,9 +181,7 @@ void session::close_socket(std::string_view socket_name, boost::cobalt::io::stre
     auto endpoint = std::string{"unknown"};
 
     if (socket.is_open()) {
-        auto remote = socket.remote_endpoint();
-
-        if (remote) {
+        if (auto remote = socket.remote_endpoint()) {
             endpoint = asio_coro_utils::format_endpoint(*remote);
         } else {
             log_close_error(socket_name, "remote_endpoint", endpoint, remote.error());
