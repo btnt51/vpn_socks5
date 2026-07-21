@@ -1,4 +1,5 @@
 {
+  "log_directory": "./logs",
   "loggers":[
     {
       "module_name": "session",

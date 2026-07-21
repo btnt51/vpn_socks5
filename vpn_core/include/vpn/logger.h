@@ -2,6 +2,7 @@
 #define VPN_LOGGER_H
 
 #include <cassert>
+#include <expected>
 #include <filesystem>
 #include <map>
 #include <flat_map>
@@ -39,6 +40,11 @@ struct logger_config {
     int rotation_minute{30};
 };
 using loggers_settings = std::vector<logger_config>;
+struct config {
+    std::string log_directory;
+    loggers_settings settings;
+};
+
 
 class logger {
 public:
@@ -49,13 +55,16 @@ public:
 
     void shutdown();
 
+    void set_log_directory(const std::string& path);
+
 private:
-    std::unordered_map<std::string,std::shared_ptr<spdlog::async_logger>> loggers;
+    std::unordered_map<std::string,std::shared_ptr<spdlog::async_logger>> loggers_;
+    std::string log_directory_;
 };
 
 class runtime {
 public:
-    explicit runtime(const loggers_settings& settings);
+    static std::expected<std::unique_ptr<runtime>, std::string> create(const config& settings);
 
     ~runtime() noexcept;
 
@@ -65,13 +74,14 @@ public:
     logger& get() noexcept;
 
 private:
+    explicit runtime(const config& settings);
     logger logger_;
 };
 
 template<typename ... Args>
 void logger::log(const std::string& module_name, logger_levels log_level, fmt::format_string<Args...> fmt, Args &&...args) {
-    const auto logger_it = loggers.find(module_name);
-    if (logger_it == loggers.end()) {
+    const auto logger_it = loggers_.find(module_name);
+    if (logger_it == loggers_.end()) {
         assert(false && fmt::format("there is no logger with name {}", module_name).c_str());
         return;
     }

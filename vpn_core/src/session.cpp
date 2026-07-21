@@ -359,7 +359,7 @@ boost::cobalt::promise<bool> session::session::send_success_socks5_connect() {
         }
 
         logger_.log("session", logger_levels::e_info,
-            "session id: {} username: {} sending socks5 succeeded command response failed reply code: {:02x}",
+            "session id: {} username: {} sending socks5 succeeded command response reply code: {:02x}",
             session_id_, username_, static_cast<uint8_t>(socks5::reply_code::succeeded));
 
         auto write_ec = co_await send_socks_message(response);

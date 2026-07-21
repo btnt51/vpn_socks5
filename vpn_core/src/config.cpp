@@ -189,33 +189,40 @@ std::expected<logger::logger_config, std::string> parse_and_validate_json_logger
     }
 }
 
-std::expected<logger::loggers_settings, std::string> parse_json(const boost::json::value &object) {
+std::expected<logger::config, std::string> parse_json(const boost::json::value &object) {
     if (not object.is_object()) {
         return std::unexpected{"Root of config must be an object"};
     }
 
     const auto& root_object = object.as_object();
+    const auto* log_directory_value = root_object.if_contains("log_directory");
     const auto* loggers_value = root_object.if_contains("loggers");
 
+    if (log_directory_value == nullptr) {
+        return std::unexpected{"Required field '$.log_directory' is missing"};
+    }
+    if (not log_directory_value->is_string()) {
+        return std::unexpected{"'$.log_directory' must be string"};
+    }
     if (loggers_value == nullptr) {
         return std::unexpected{"Required field '$.loggers' is missing"};
     }
-
     if (not loggers_value->is_array()) {
         return std::unexpected{"'$.loggers' must be an array"};
     }
 
     const auto& array = loggers_value->as_array();
-    logger::loggers_settings loggers_settings;
-    loggers_settings.reserve(array.size());
+    logger::config config;
+    config.log_directory = log_directory_value->as_string();
+    config.settings.reserve(array.size());
     for (std::size_t index = 0; index < array.size(); ++index) {
-        auto config = parse_and_validate_json_logger_config_object(array[index]);
-        if (not config) {
-            return std::unexpected{fmt::format("[{}].{}", index, config.error())};
+        auto logger_config = parse_and_validate_json_logger_config_object(array[index]);
+        if (not logger_config) {
+            return std::unexpected{fmt::format("[{}].{}", index, logger_config.error())};
         }
-        loggers_settings.emplace_back(std::move(*config));
+        config.settings.emplace_back(std::move(*logger_config));
     }
-    return loggers_settings;
+    return config;
 }
 
 std::expected<void, std::string> validate_config_struct(std::set<std::string_view>& duplicates_names,
@@ -266,12 +273,17 @@ std::expected<void, std::string> validate_config_struct(std::set<std::string_vie
 }
 }
 
-std::expected<void, std::string> validate(const logger::loggers_settings &configs) {
+std::expected<void, std::string> validate(const logger::config &config) {
+    const std::filesystem::path directory{config.log_directory};
+    if (directory.empty() or not is_directory(directory)) {
+        return std::unexpected{"'log_directory' must be a path to directory"};
+    }
+
+    int index = 0;
     std::set<std::string_view> duplicates_names;
     std::set<std::string_view> duplicates_files;
-    int index = 0;
-    for (const auto& config : configs) {
-        if (auto validation = logger_config::validate_config_struct(duplicates_names, duplicates_files, config); not validation) {
+    for (const auto& logger_config : config.settings) {
+        if (auto validation = logger_config::validate_config_struct(duplicates_names, duplicates_files, logger_config); not validation) {
             return std::unexpected{fmt::format("[{}].{}", index, validation.error())};
         }
         index++;
@@ -279,9 +291,9 @@ std::expected<void, std::string> validate(const logger::loggers_settings &config
     return {};
 }
 
-std::expected<logger::loggers_settings, std::string> validate_and_return(logger::loggers_settings configs) {
-    return validate(configs).transform([configs = std::move(configs)] mutable -> logger::loggers_settings {
-        return std::move(configs);
+std::expected<logger::config, std::string> validate_and_return(logger::config config) {
+    return validate(config).transform([config = std::move(config)] mutable -> logger::config {
+        return std::move(config);
     });
 }
 
@@ -359,7 +371,7 @@ std::expected<server::config, std::string> validate_and_return(server::config co
     });
 }
 
-std::expected<logger::loggers_settings, std::string> load_logger_config_file(const std::filesystem::path &config_folder_path) {
+std::expected<logger::config, std::string> load_logger_config_file(const std::filesystem::path &config_folder_path) {
     if (not std::filesystem::exists(config_folder_path)) {
         return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
     }
@@ -371,8 +383,8 @@ std::expected<logger::loggers_settings, std::string> load_logger_config_file(con
     return read_json_file(config_path).and_then([](const boost::json::value& json) {
         return logger_config::parse_json(json);
     })
-    .and_then([](logger::loggers_settings configs) -> std::expected<logger::loggers_settings, std::string> {
-        return validate_and_return(std::move(configs));
+    .and_then([](logger::config config) -> std::expected<logger::config, std::string> {
+        return validate_and_return(std::move(config));
     });
 }
 
@@ -403,7 +415,7 @@ std::expected<config::main_config, std::string> config::load_config(const std::f
     if (not server_config) {
         return std::unexpected{fmt::format("Failed to load server config: {}", server_config.error())};
     }
-    return config::main_config{std::move(*logger_config), std::move(*server_config)};
+    return config::main_config{std::move(logger_config.value()), std::move(server_config.value())};
 }
 
 

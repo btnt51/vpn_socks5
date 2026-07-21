@@ -23,10 +23,20 @@ protected:
         std::filesystem::remove_all(directory_, ec);
     }
 
-    void WriteConfig(std::string_view contents) const {
+    void WriteConfig(std::string_view contents, bool add_log_directory = true) const {
+        std::string config{contents};
+        const auto root_start = config.find_first_not_of(" \t\r\n");
+        if (add_log_directory and root_start != std::string::npos and config[root_start] == '{' and
+            config.find("\"log_directory\"") == std::string::npos) {
+            const auto first_property = config.find_first_not_of(" \t\r\n", root_start + 1);
+            const auto separator = first_property != std::string::npos and config[first_property] == '}' ? "" : ",";
+            config.insert(root_start + 1,
+                "\n  \"log_directory\": \"" + directory_.generic_string() + "\"" + separator);
+        }
+
         std::ofstream file{directory_ / "loggers.json"};
         ASSERT_TRUE(file.is_open());
-        file << contents;
+        file << config;
         ASSERT_TRUE(file.good());
     }
 
@@ -79,13 +89,37 @@ TEST_F(ConfigFileTest, ReadsValidLoggerConfig) {
     const auto result = config::load_config(directory_);
 
     ASSERT_TRUE(result.has_value()) << result.error();
-    ASSERT_EQ(result->loggers.size(), 1);
-    EXPECT_EQ(result->loggers.front().module_name, "server");
-    EXPECT_EQ(result->loggers.front().filename, "server.log");
-    EXPECT_EQ(result->loggers.front().pattern, "[%l] %v");
-    EXPECT_EQ(result->loggers.front().level, "info");
-    EXPECT_EQ(result->loggers.front().rotation_hour, 23);
-    EXPECT_EQ(result->loggers.front().rotation_minute, 59);
+    EXPECT_EQ(result->loggers.log_directory, directory_.generic_string());
+    ASSERT_EQ(result->loggers.settings.size(), 1);
+    EXPECT_EQ(result->loggers.settings.front().module_name, "server");
+    EXPECT_EQ(result->loggers.settings.front().filename, "server.log");
+    EXPECT_EQ(result->loggers.settings.front().pattern, "[%l] %v");
+    EXPECT_EQ(result->loggers.settings.front().level, "info");
+    EXPECT_EQ(result->loggers.settings.front().rotation_hour, 23);
+    EXPECT_EQ(result->loggers.settings.front().rotation_minute, 59);
+}
+
+TEST_F(ConfigFileTest, RejectsMissingLogDirectory) {
+    WriteConfig(valid_config, false);
+    WriteValidServerConfig();
+
+    const auto result = config::load_config(directory_);
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_NE(result.error().find("Required field '$.log_directory' is missing"), std::string::npos);
+}
+
+TEST_F(ConfigFileTest, RejectsNonStringLogDirectory) {
+    WriteConfig(R"json({
+      "log_directory": 42,
+      "loggers": []
+    })json");
+    WriteValidServerConfig();
+
+    const auto result = config::load_config(directory_);
+
+    ASSERT_FALSE(result.has_value());
+    EXPECT_NE(result.error().find("'$.log_directory' must be string"), std::string::npos);
 }
 
 TEST(ConfigLoader, RejectsMissingConfigDirectory) {

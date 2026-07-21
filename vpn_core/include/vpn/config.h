@@ -7,7 +7,7 @@
 
 namespace config {
 struct main_config {
-    logger::loggers_settings loggers;
+    logger::config loggers;
     server::config server;
 };
 std::expected<config::main_config, std::string> load_config(const std::filesystem::path &config_folder_path = "./config/");

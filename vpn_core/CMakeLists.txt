@@ -32,6 +32,7 @@ if(VPN_BUILD_TESTS)
     add_executable(vpn_tests
             tests/socks5_tests.cpp
             tests/config_tests.cpp
+            tests/logger_tests.cpp
     )
 
     target_link_libraries(
