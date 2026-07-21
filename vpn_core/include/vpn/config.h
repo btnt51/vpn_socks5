@@ -6,8 +6,11 @@
 #include <vpn/server.h>
 
 namespace config {
-std::expected<logger::loggers_settings, std::string> load_logger_config_file(const std::filesystem::path &config_folder_path = "./config/");
-std::expected<server::config, std::string> load_server_config_file(const std::filesystem::path &config_folder_path = "./config/");
+struct main_config {
+    logger::loggers_settings loggers;
+    server::config server;
+};
+std::expected<config::main_config, std::string> load_config(const std::filesystem::path &config_folder_path = "./config/");
 }
 
 #endif //VPN_CONFIG_H

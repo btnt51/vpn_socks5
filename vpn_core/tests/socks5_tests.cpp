@@ -2,13 +2,78 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
+#include <boost/asio/error.hpp>
 #include <gtest/gtest.h>
 
 #include <vpn/socks5.h>
 
 namespace {
+
+TEST(Socks5ReplyCode, MapsEveryConnectionError) {
+    using connection_error = socks5::connection_error;
+    using reply_code = socks5::reply_code;
+
+    constexpr std::array cases{
+        std::pair{connection_error::resolve_failed, reply_code::host_unreachable},
+        std::pair{connection_error::connection_refused, reply_code::connection_refused},
+        std::pair{connection_error::network_unreachable, reply_code::network_unreachable},
+        std::pair{connection_error::host_unreachable, reply_code::host_unreachable},
+        std::pair{connection_error::timeout, reply_code::general_failure},
+        std::pair{connection_error::ruleset_denied, reply_code::not_allowed},
+        std::pair{connection_error::unsupported_command, reply_code::command_not_supported},
+        std::pair{connection_error::unsupported_address_type, reply_code::address_type_not_supported},
+        std::pair{connection_error::io_error, reply_code::general_failure},
+        std::pair{connection_error::internal_error, reply_code::general_failure},
+    };
+
+    for (const auto& [error, expected] : cases) {
+        SCOPED_TRACE(static_cast<int>(error));
+        EXPECT_EQ(socks5::to_reply_code(error), expected);
+    }
+}
+
+TEST(Socks5ReplyCode, MapsSupportedSystemErrors) {
+    using reply_code = socks5::reply_code;
+
+    const std::array cases{
+        std::pair{
+            boost::system::error_code{boost::asio::error::connection_refused},
+            reply_code::connection_refused},
+        std::pair{
+            boost::system::error_code{boost::asio::error::host_unreachable},
+            reply_code::host_unreachable},
+        std::pair{
+            boost::system::error_code{boost::asio::error::network_unreachable},
+            reply_code::network_unreachable},
+    };
+
+    for (const auto& [error, expected] : cases) {
+        SCOPED_TRACE(error.message());
+        EXPECT_EQ(socks5::to_reply_code(error), expected);
+    }
+}
+
+TEST(Socks5ReplyCode, MapsUnknownSystemErrorToGeneralFailure) {
+    const boost::system::error_code error{
+        12345,
+        boost::system::generic_category()
+    };
+
+    EXPECT_EQ(
+        socks5::to_reply_code(error),
+        socks5::reply_code::general_failure
+    );
+}
+
+TEST(Socks5ReplyCode, MapsEmptySystemErrorToGeneralFailure) {
+    EXPECT_EQ(
+        socks5::to_reply_code(boost::system::error_code{}),
+        socks5::reply_code::general_failure
+    );
+}
 
 TEST(Socks5NegotiationParser, ParsesNoAuthGreeting) {
     std::array<std::uint8_t, 3> bytes{0x05, 0x01, 0x00};

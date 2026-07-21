@@ -9,11 +9,10 @@
 
 namespace server {
 using namespace boost::cobalt::io;
-server::server(boost::cobalt::executor io_context, const config& config) : io_context_(std::move(io_context)),
-    acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_) {
+server::server(boost::cobalt::executor io_context, const config& config, logger::logger& logger) : io_context_(std::move(io_context)),
+    acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_), logger_(logger) {
     g_logger.log("server", logger_levels::e_info,
                 "Server acceptor started at ip: {}, port: {}", config.address, config.port);
-    sessions_.reserve(1024);
 }
 
 server::~server() {
@@ -30,10 +29,11 @@ boost::cobalt::task<void>server::accept() {
                 "Could not accept connection from acceptor with error: {}" ,error.message());
             continue;
         }
-        auto session = std::make_shared<::session>(io_context_, std::move(socket));
+        auto session = std::make_shared<::session>(io_context_, std::move(socket), logger_);
+        auto it = sessions_.insert(sessions_.end(), session);
         g_logger.log("server", logger_levels::e_info,
                 "Accepting new session session id:{} username: {}", session->session_id(), session->username());
-        boost::cobalt::spawn(io_context_, session->run(), [session](const std::exception_ptr &ep) {
+        boost::cobalt::spawn(io_context_, session->run(), [this, session, it](const std::exception_ptr &ep) mutable {
             if (ep) {
                 try {
                     std::rethrow_exception(ep);
@@ -43,8 +43,8 @@ boost::cobalt::task<void>server::accept() {
                 }
                 session->cancel();
             }
+            sessions_.erase(it);
         });
-        sessions_.push_back(session);
     }
 }
 
@@ -59,4 +59,55 @@ void server::cancel() {
         session->cancel();
     }
 }
+
+std::expected<std::unique_ptr<runtime>, std::string> runtime::create(const config& config, logger::logger& logger) {
+    try {
+        return std::unique_ptr<runtime>{new runtime{config, logger}};
+    } catch (const boost::system::system_error& error) {
+        return std::unexpected{error.what()};
+    } catch (const std::exception& error) {
+        return std::unexpected{error.what()};
+    }
+}
+
+int runtime::run() {
+    boost::cobalt::spawn(io_context_.get_executor(),server_.accept(), [this](const std::exception_ptr &error) {
+        failure_ = error;
+
+        if (error) {
+            io_context_.stop();
+        }
+    });
+
+    io_context_.run();
+
+    if (!failure_) {
+        return 0;
+    }
+
+    try {
+        std::rethrow_exception(failure_);
+    } catch (const std::exception& error) {
+        logger_.log("server", logger_levels::e_error, "Server stopped with error: {}", error.what());
+    }
+
+    return 1;
+}
+
+void runtime::stop() noexcept {
+    g_logger.log("server", logger_levels::e_info, "Server stopping");
+    server_.cancel();
+    g_logger.log("server", logger_levels::e_info, "Server stopped");
+}
+
+namespace {
+boost::cobalt::executor prepare_executor(boost::asio::io_context& context) {
+    auto executor = context.get_executor();
+    boost::cobalt::this_thread::set_executor(executor);
+    return executor;
+}
+}
+
+runtime::runtime(const config& config, logger::logger& logger) : io_context_{}, logger_{logger},
+        server_{prepare_executor(io_context_), config, logger_} {}
 }

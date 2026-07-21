@@ -358,9 +358,8 @@ std::expected<server::config, std::string> validate_and_return(server::config co
         return std::move(config);
     });
 }
-}
 
-std::expected<logger::loggers_settings, std::string> config::load_logger_config_file(const std::filesystem::path &config_folder_path) {
+std::expected<logger::loggers_settings, std::string> load_logger_config_file(const std::filesystem::path &config_folder_path) {
     if (not std::filesystem::exists(config_folder_path)) {
         return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
     }
@@ -377,7 +376,7 @@ std::expected<logger::loggers_settings, std::string> config::load_logger_config_
     });
 }
 
-std::expected<server::config, std::string> config::load_server_config_file(const std::filesystem::path &config_folder_path) {
+std::expected<server::config, std::string> load_server_config_file(const std::filesystem::path &config_folder_path) {
     if (not std::filesystem::exists(config_folder_path)) {
         return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
     }
@@ -392,4 +391,19 @@ std::expected<server::config, std::string> config::load_server_config_file(const
         return validate_and_return(std::move(configs));
     });
 }
+}
+
+std::expected<config::main_config, std::string> config::load_config(const std::filesystem::path &config_folder_path) {
+    auto logger_config = load_logger_config_file(config_folder_path);
+    if (not logger_config) {
+        return std::unexpected{fmt::format("Failed to load logger config: {}", logger_config.error())};
+    }
+
+    auto server_config = load_server_config_file(config_folder_path);
+    if (not server_config) {
+        return std::unexpected{fmt::format("Failed to load server config: {}", server_config.error())};
+    }
+    return config::main_config{std::move(*logger_config), std::move(*server_config)};
+}
+
 

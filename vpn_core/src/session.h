@@ -8,10 +8,11 @@
 #include <boost/asio/streambuf.hpp>
 #include <boost/cobalt/promise.hpp>
 #include <boost/cobalt/task.hpp>
+#include <boost/cobalt/io/resolver.hpp>
+#include <boost/cobalt/io/stream_socket.hpp>
 
 #include <vpn/socks5.h>
-#include "boost/cobalt/io/resolver.hpp"
-#include "boost/cobalt/io/stream_socket.hpp"
+#include <vpn/logger.h>
 
 
 enum class session_states {
@@ -28,16 +29,16 @@ enum class session_states {
 
 std::string_view session_state_to_string(session_states state);
 
-static uint64_t generate_session_id() {
-    static uint64_t session_id = 0;
-    return session_id++;
+inline std::uint64_t generate_session_id() noexcept {
+    static std::atomic_uint64_t next_id{1};
+    return next_id.fetch_add(1, std::memory_order_relaxed);
 }
 
 class session : public std::enable_shared_from_this<session> {
 public:
-    session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket)
+    session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket, logger::logger& logger)
         : executor_{std::move(io_executor)}, client_connection_{std::move(socket)}, upstream_connection_{executor_},
-          resolver_{executor_},session_id_{generate_session_id()} {
+          resolver_{executor_}, logger_{logger}, session_id_{generate_session_id()} {
         set_session_state(session_states::e_started);
     }
 
@@ -87,6 +88,7 @@ private:
     boost::cobalt::io::resolver resolver_;
     boost::asio::streambuf client_buffer_;
     boost::asio::streambuf upstream_buffer_;
+    logger::logger& logger_;
     std::string username_{"unknown"};
     uint64_t session_id_;
     session_states state_{session_states::e_none};

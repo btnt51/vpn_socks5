@@ -53,6 +53,21 @@ private:
     std::unordered_map<std::string,std::shared_ptr<spdlog::async_logger>> loggers;
 };
 
+class runtime {
+public:
+    explicit runtime(const loggers_settings& settings);
+
+    ~runtime() noexcept;
+
+    runtime(const runtime&) = delete;
+    runtime& operator=(const runtime&) = delete;
+
+    logger& get() noexcept;
+
+private:
+    logger logger_;
+};
+
 template<typename ... Args>
 void logger::log(const std::string& module_name, logger_levels log_level, fmt::format_string<Args...> fmt, Args &&...args) {
     const auto logger_it = loggers.find(module_name);
@@ -63,21 +78,9 @@ void logger::log(const std::string& module_name, logger_levels log_level, fmt::f
     const auto& logger = logger_it->second;
     logger->log(static_cast<spdlog::level::level_enum>(log_level), std::forward<fmt::format_string<Args...>>(fmt), std::forward<Args>(args)...);
 }
-
-
-void init_logger(const std::vector<logger_config>& configs);
-void shutdown_logger();
 }
 
-inline logger_levels from_string(std::string_view log_level) {
-    if (log_level.empty()) {
-        return logger_levels::e_debug;
-    }
-    if (not map_string_logger_level.contains(log_level)) {
-        return logger_levels::e_debug;
-    }
-    return map_string_logger_level.at(log_level);
-}
+
 
 inline logger::logger g_logger{};
 #endif //VPN_LOGGER_H
