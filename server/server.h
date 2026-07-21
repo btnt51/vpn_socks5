@@ -1,18 +1,21 @@
 #ifndef VPN_SERVER_H
 #define VPN_SERVER_H
 #include <optional>
-
-#include <boost/asio/ip/tcp.hpp>
-
 #include <boost/cobalt/task.hpp>
-
-#include "boost/cobalt/io/acceptor.hpp"
+#include <boost/cobalt/io/acceptor.hpp>
 
 class session;
 
+namespace server {
+struct config {
+    std::string address;
+    std::uint16_t port;
+};
+
+
 class server {
 public:
-    server(boost::cobalt::executor io_context);
+    server(boost::cobalt::executor io_context, const config& config);
 
     ~server();
 
@@ -25,6 +28,7 @@ private:
     std::vector<std::shared_ptr<session>> sessions_;
     bool stopping_{false};
 };
+}
 
 
 #endif //VPN_SERVER_H

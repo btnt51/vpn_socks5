@@ -49,7 +49,7 @@ constexpr std::string_view valid_config = R"json(
 TEST_F(ConfigFileTest, ReadsValidLoggerConfig) {
     WriteConfig(valid_config);
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_TRUE(result.has_value()) << result.error();
     ASSERT_EQ(result->size(), 1);
@@ -67,14 +67,14 @@ TEST(ConfigLoader, RejectsMissingConfigDirectory) {
     std::error_code ec;
     std::filesystem::remove_all(path, ec);
 
-    const auto result = config::load_config_file(path);
+    const auto result = config::load_logger_config_file(path);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("does not exist"), std::string::npos);
 }
 
 TEST_F(ConfigFileTest, RejectsMissingConfigFile) {
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("loggers.json"), std::string::npos);
@@ -83,7 +83,7 @@ TEST_F(ConfigFileTest, RejectsMissingConfigFile) {
 TEST_F(ConfigFileTest, RejectsMalformedJson) {
     WriteConfig(R"json({"loggers": [})json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("parsing config file"), std::string::npos);
@@ -92,7 +92,7 @@ TEST_F(ConfigFileTest, RejectsMalformedJson) {
 TEST_F(ConfigFileTest, RejectsNonObjectRoot) {
     WriteConfig(R"json([])json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), "Root of config must be an object");
@@ -101,7 +101,7 @@ TEST_F(ConfigFileTest, RejectsNonObjectRoot) {
 TEST_F(ConfigFileTest, RejectsMissingLoggersArray) {
     WriteConfig(R"json({})json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), "Required field '$.loggers' is missing");
@@ -119,7 +119,7 @@ TEST_F(ConfigFileTest, RejectsLoggerWithWrongFieldType) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), "[0].'module_name' be string");
@@ -141,7 +141,7 @@ TEST_F(ConfigFileTest, RejectsDuplicateModuleNames) {
       ]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("'module_name' `server` already exists"), std::string::npos);
@@ -156,7 +156,7 @@ TEST_F(ConfigFileTest, RejectsUnsafeLogFilename) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("plain relative filename"), std::string::npos);
@@ -171,7 +171,7 @@ TEST_F(ConfigFileTest, RejectsEmptyLogLevel) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("'level' must be not empty"), std::string::npos);
@@ -186,7 +186,7 @@ TEST_F(ConfigFileTest, RejectsNonStringLogLevel) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), "[0].'level' be string");
@@ -201,7 +201,7 @@ TEST_F(ConfigFileTest, RejectsUnknownLogLevel) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("'level' must bet one of"), std::string::npos);
@@ -216,7 +216,7 @@ TEST_F(ConfigFileTest, RejectsOutOfRangeRotationTime) {
       }]
     })json");
 
-    const auto result = config::load_config_file(directory_);
+    const auto result = config::load_logger_config_file(directory_);
 
     ASSERT_FALSE(result.has_value());
     EXPECT_NE(result.error().find("'rotation_hour' must be in range [0, 23]"), std::string::npos);

@@ -7,16 +7,12 @@
 
 #include <boost/cobalt/spawn.hpp>
 
-
-server::server(boost::cobalt::executor io_context)
-    : io_context_(std::move(io_context)),
-      acceptor_(
-          std::in_place,
-          boost::cobalt::io::endpoint{
-              boost::asio::ip::tcp::endpoint{boost::asio::ip::tcp::v4(), 1080}
-          },
-          io_context_
-      ) {
+namespace server {
+using namespace boost::cobalt::io;
+server::server(boost::cobalt::executor io_context, const config& config) : io_context_(std::move(io_context)),
+    acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_) {
+    g_logger.log("server", logger_levels::e_info,
+                "Server acceptor started at ip: {}, port: {}", config.address, config.port);
     sessions_.reserve(1024);
 }
 
@@ -34,12 +30,11 @@ boost::cobalt::task<void>server::accept() {
                 "Could not accept connection from acceptor with error: {}" ,error.message());
             continue;
         }
-        auto session = std::make_shared<class session>(io_context_, std::move(socket));
+        auto session = std::make_shared<::session>(io_context_, std::move(socket));
         g_logger.log("server", logger_levels::e_info,
                 "Accepting new session session id:{} username: {}", session->session_id(), session->username());
-        boost::cobalt::spawn(io_context_, session->run(), [session](std::exception_ptr ep) {
+        boost::cobalt::spawn(io_context_, session->run(), [session](const std::exception_ptr &ep) {
             if (ep) {
-                // log crash
                 try {
                     std::rethrow_exception(ep);
                 } catch (std::exception& e) {
@@ -57,11 +52,11 @@ void server::cancel() {
     if (std::exchange(stopping_, true)) {
         return;
     }
-    g_logger.log("server", logger_levels::e_info,
-        "Stoped server");
+    g_logger.log("server", logger_levels::e_info, "Stopped server");
     acceptor_.reset();
 
     for (const auto& session : sessions_) {
         session->cancel();
     }
+}
 }

@@ -6,6 +6,8 @@
 #include <boost/json/parse.hpp>
 #include <boost/json/value_to.hpp>
 
+#include "boost/asio/ip/address.hpp"
+
 namespace logger {
 logger_config tag_invoke(boost::json::value_to_tag<logger_config>, boost::json::value const& jv ) {
     boost::json::object const& obj = jv.as_object();
@@ -19,6 +21,36 @@ logger_config tag_invoke(boost::json::value_to_tag<logger_config>, boost::json::
     };
 }
 }
+
+namespace server {
+config tag_invoke(boost::json::value_to_tag<config>, boost::json::value const& jv ) {
+    boost::json::object const& obj = jv.as_object();
+    return config {
+        value_to<std::string>(obj.at("ip")),
+        value_to<std::uint16_t>(obj.at("port")),
+    };
+}
+}
+
+namespace {
+std::expected<boost::json::value, std::string> read_json_file(const std::filesystem::path &config_file_path) {
+    if (not std::filesystem::exists(config_file_path)) {
+        return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_file_path.string())};
+    }
+    std::ifstream file(config_file_path.string(), std::ios::in);
+    if (not file.is_open()) {
+        return std::unexpected{fmt::format("Could not open config file `{}`", config_file_path.string())};
+    }
+    boost::system::error_code ec;
+    std::string content((std::istreambuf_iterator<char>(file)), {});
+    auto res = boost::json::parse(content, ec);
+    if (ec) {
+        return std::unexpected{fmt::format("Error occurred while parsing config file `{}` error: {}", config_file_path.string(), ec.message())};
+    }
+    return res;
+}
+
+namespace logger_config {
 namespace {
 std::expected<void, std::string> validate_spdlog_pattern(std::string_view pattern) {
     if (pattern.empty()) {
@@ -106,23 +138,6 @@ std::expected<void, std::string> validate_spdlog_pattern(std::string_view patter
     }
 
     return {};
-}
-
-std::expected<boost::json::value, std::string> read_json_file(const std::filesystem::path &config_file_path) {
-    if (not std::filesystem::exists(config_file_path)) {
-        return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_file_path.string())};
-    }
-    std::ifstream file(config_file_path.string(), std::ios::in);
-    if (not file.is_open()) {
-        return std::unexpected{fmt::format("Could not open config file `{}`", config_file_path.string())};
-    }
-    boost::system::error_code ec;
-    std::string content((std::istreambuf_iterator<char>(file)), {});
-    auto res = boost::json::parse(content, ec);
-    if (ec) {
-        return std::unexpected{fmt::format("Error occurred while parsing config file `{}` error: {}", config_file_path.string(), ec.message())};
-    }
-    return res;
 }
 
 std::expected<logger::logger_config, std::string> parse_and_validate_json_logger_config_object(const boost::json::value &object) {
@@ -248,13 +263,15 @@ std::expected<void, std::string> validate_config_struct(std::set<std::string_vie
     }
     return {};
 }
+}
+}
 
 std::expected<void, std::string> validate(const logger::loggers_settings &configs) {
     std::set<std::string_view> duplicates_names;
     std::set<std::string_view> duplicates_files;
     int index = 0;
     for (const auto& config : configs) {
-        if (auto validation = validate_config_struct(duplicates_names, duplicates_files, config); not validation) {
+        if (auto validation = logger_config::validate_config_struct(duplicates_names, duplicates_files, config); not validation) {
             return std::unexpected{fmt::format("[{}].{}", index, validation.error())};
         }
         index++;
@@ -267,9 +284,71 @@ std::expected<logger::loggers_settings, std::string> validate_and_return(logger:
         return std::move(configs);
     });
 }
+
+namespace server_config {
+namespace {
+std::expected<server::config, std::string> parse_and_validate_json_server_config_object(const boost::json::value &object) {
+    const auto& obj = object.as_object();
+    if (not obj.contains("ip")) {
+        return std::unexpected{fmt::format("must contains 'ip'")};
+    }
+    if (auto ip = obj.if_contains("ip"); ip->as_string().empty()) {
+        return std::unexpected{fmt::format("'ip' must not be empty")};
+    }
+    if (not obj.contains("port")) {
+        return std::unexpected{fmt::format("must contains 'port'")};
+    }
+    auto port = obj.if_contains("port");
+    if (port->as_int64() < 0 or port->as_int64() > 65535) {
+        return std::unexpected{fmt::format("'port' must be in range [0, 65535]")};
+    }
+    try {
+        return boost::json::value_to<server::config>(object);
+    } catch (const std::exception& e) {
+        return std::unexpected{fmt::format("Failed to convert server configuration: {}",e.what())};
+    }
 }
 
-std::expected<logger::loggers_settings, std::string> config::load_config_file(const std::filesystem::path &config_folder_path) {
+std::expected<server::config, std::string> parse_json(const boost::json::value &object) {
+    if (not object.is_object()) {
+        return std::unexpected{"Root of config must be an object"};
+    }
+
+    const auto& root_object = object.as_object();
+    const auto* server_value = root_object.if_contains("server");
+
+    if (server_value == nullptr) {
+        return std::unexpected{"Required field '$.server' is missing"};
+    }
+    auto config = parse_and_validate_json_server_config_object(*server_value);
+    if (not config) {
+        return std::unexpected{fmt::format("'server' config error: {}" ,config.error())};
+    }
+
+    return config;
+}
+}
+}
+
+std::expected<void, std::string> validate(const server::config &config) {
+    try {
+        boost::asio::ip::make_address(config.address);
+    } catch (const boost::system::system_error& error) {
+        return std::unexpected{fmt::format("Could not make address from: {} error: {}", config.address, error.what())};
+    } catch (const std::exception& error) {
+        return std::unexpected{fmt::format("Could not make address from: {} error: {}", config.address, error.what())};
+    }
+    return {};
+}
+
+std::expected<server::config, std::string> validate_and_return(server::config config) {
+    return validate(config).transform([config = std::move(config)] mutable -> server::config {
+        return std::move(config);
+    });
+}
+}
+
+std::expected<logger::loggers_settings, std::string> config::load_logger_config_file(const std::filesystem::path &config_folder_path) {
     if (not std::filesystem::exists(config_folder_path)) {
         return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
     }
@@ -279,9 +358,25 @@ std::expected<logger::loggers_settings, std::string> config::load_config_file(co
     }
 
     return read_json_file(config_path).and_then([](const boost::json::value& json) {
-        return parse_json(json);
+        return logger_config::parse_json(json);
     })
-    .and_then([](logger::loggers_settings configs) {
+    .and_then([](logger::loggers_settings configs) -> std::expected<logger::loggers_settings, std::string> {
+        return validate_and_return(std::move(configs));
+    });
+}
+
+std::expected<server::config, std::string> config::load_server_config_file(const std::filesystem::path &config_folder_path) {
+    if (not std::filesystem::exists(config_folder_path)) {
+        return std::unexpected{fmt::format("Config folder `{}` does not exist", config_folder_path.string())};
+    }
+    auto config_path = std::filesystem::path{config_folder_path/"server.json"};
+    if (not std::filesystem::exists(config_path)) {
+        return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_path.string())};
+    }
+    return read_json_file(config_path).and_then([](const boost::json::value& json) {
+        return server_config::parse_json(json);
+    })
+    .and_then([](server::config configs) -> std::expected<server::config, std::string> {
         return validate_and_return(std::move(configs));
     });
 }
