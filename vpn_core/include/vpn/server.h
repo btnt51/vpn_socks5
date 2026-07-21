@@ -11,7 +11,9 @@
 
 #include <vpn/logger.h>
 
+namespace session{
 class session;
+}
 namespace server {
 struct config {
     std::string address;
@@ -31,7 +33,7 @@ public:
 private:
     boost::cobalt::executor io_context_;
     std::optional<boost::cobalt::io::acceptor> acceptor_;
-    std::list<std::shared_ptr<session>> sessions_;
+    std::list<std::shared_ptr<session::session>> sessions_;
     logger::logger& logger_;
     bool stopping_{false};
 };

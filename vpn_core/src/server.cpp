@@ -11,7 +11,7 @@ namespace server {
 using namespace boost::cobalt::io;
 server::server(boost::cobalt::executor io_context, const config& config, logger::logger& logger) : io_context_(std::move(io_context)),
     acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_), logger_(logger) {
-    g_logger.log("server", logger_levels::e_info,
+    logger_.log("server", logger_levels::e_info,
                 "Server acceptor started at ip: {}, port: {}", config.address, config.port);
 }
 
@@ -25,24 +25,27 @@ boost::cobalt::task<void>server::accept() {
         if (stopping_)
             break;
         if (error) {
-            g_logger.log("server", logger_levels::e_warning,
+            logger_.log("server", logger_levels::e_warning,
                 "Could not accept connection from acceptor with error: {}" ,error.message());
             continue;
         }
-        auto session = std::make_shared<::session>(io_context_, std::move(socket), logger_);
+        auto session = std::make_shared<::session::session>(io_context_, std::move(socket), logger_);
         auto it = sessions_.insert(sessions_.end(), session);
-        g_logger.log("server", logger_levels::e_info,
-                "Accepting new session session id:{} username: {}", session->session_id(), session->username());
+        logger_.log("server", logger_levels::e_info,
+                "Accepting new session session id: {} username: {}", session->session_id(), session->username());
         boost::cobalt::spawn(io_context_, session->run(), [this, session, it](const std::exception_ptr &ep) mutable {
             if (ep) {
                 try {
                     std::rethrow_exception(ep);
                 } catch (std::exception& e) {
-                    g_logger.log("session", logger_levels::e_warning,
-                        "While session was running there was thrown an exception: {}", e.what());
+                    logger_.log("session", logger_levels::e_warning,
+                        "While session [session id: {} username: {}] was running there was thrown an exception: {}",
+                        session->session_id(), session->username(), e.what());
                 }
                 session->cancel();
             }
+            logger_.log("session", logger_levels::e_info, "Session [session id: {} username: {}] statistic: [{}]",
+                        session->session_id(), session->username(), session->statistics());
             sessions_.erase(it);
         });
     }
@@ -52,7 +55,7 @@ void server::cancel() {
     if (std::exchange(stopping_, true)) {
         return;
     }
-    g_logger.log("server", logger_levels::e_info, "Stopped server");
+    logger_.log("server", logger_levels::e_info, "Stopped server");
     acceptor_.reset();
 
     for (const auto& session : sessions_) {
@@ -95,9 +98,9 @@ int runtime::run() {
 }
 
 void runtime::stop() noexcept {
-    g_logger.log("server", logger_levels::e_info, "Server stopping");
+    logger_.log("server", logger_levels::e_info, "Server stopping");
     server_.cancel();
-    g_logger.log("server", logger_levels::e_info, "Server stopped");
+    logger_.log("server", logger_levels::e_info, "Server stopped");
 }
 
 namespace {

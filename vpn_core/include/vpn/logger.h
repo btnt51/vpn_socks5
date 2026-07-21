@@ -80,7 +80,4 @@ void logger::log(const std::string& module_name, logger_levels log_level, fmt::f
 }
 }
 
-
-
-inline logger::logger g_logger{};
 #endif //VPN_LOGGER_H

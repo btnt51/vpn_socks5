@@ -1,5 +1,6 @@
 #ifndef VPN_SESSION_H
 #define VPN_SESSION_H
+#include <atomic>
 #include <expected>
 #include <memory>
 #include <utility>
@@ -14,7 +15,7 @@
 #include <vpn/socks5.h>
 #include <vpn/logger.h>
 
-
+namespace session {
 enum class session_states {
     e_none = 0,
     e_started = 1,
@@ -29,16 +30,23 @@ enum class session_states {
 
 std::string_view session_state_to_string(session_states state);
 
-inline std::uint64_t generate_session_id() noexcept {
+inline std::uint64_t generate_id() noexcept {
     static std::atomic_uint64_t next_id{1};
     return next_id.fetch_add(1, std::memory_order_relaxed);
 }
+
+struct statistics {
+    std::uint64_t socks_rx{};
+    std::uint64_t socks_tx{};
+    std::uint64_t bytes_client_to_upstream{};
+    std::uint64_t bytes_upstream_to_client{};
+};
 
 class session : public std::enable_shared_from_this<session> {
 public:
     session(boost::asio::any_io_executor io_executor, boost::cobalt::io::stream_socket&& socket, logger::logger& logger)
         : executor_{std::move(io_executor)}, client_connection_{std::move(socket)}, upstream_connection_{executor_},
-          resolver_{executor_}, logger_{logger}, session_id_{generate_session_id()} {
+          resolver_{executor_}, logger_{logger}, session_id_{generate_id()} {
         set_session_state(session_states::e_started);
     }
 
@@ -46,6 +54,7 @@ public:
     void cancel();
     uint64_t session_id() const;
     std::string username() const;
+    statistics statistics() const;
 private:
     boost::cobalt::promise<bool> handshake();
 
@@ -80,6 +89,8 @@ private:
     boost::cobalt::promise<void> client_to_upstream();
     boost::cobalt::promise<void> upstream_to_client();
 
+    boost::cobalt::promise<boost::system::error_code> send_socks_message(std::span<const std::uint8_t> message);
+
     bool is_expected_disconnect(const boost::system::error_code& ec) const;
 
     boost::cobalt::executor executor_;
@@ -90,10 +101,25 @@ private:
     boost::asio::streambuf upstream_buffer_;
     logger::logger& logger_;
     std::string username_{"unknown"};
+    struct statistics session_stats_{};
     uint64_t session_id_;
     session_states state_{session_states::e_none};
     bool stopping_{false};
 };
+}
 
+template<>
+struct fmt::formatter<::session::statistics> {
+    constexpr auto parse(fmt::format_parse_context& context) {
+        return context.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const ::session::statistics& stats, FormatContext& context) const {
+        return fmt::format_to(context.out(), "socks_rx={} socks_tx={} bytes_client_to_upstream={} bytes_upstream_to_client={}",
+            stats.socks_rx, stats.socks_tx, stats.bytes_client_to_upstream, stats.bytes_upstream_to_client
+        );
+    }
+};
 
 #endif //VPN_SESSION_H
