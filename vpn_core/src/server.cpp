@@ -19,7 +19,14 @@ server::~server() {
     cancel();
 }
 
+void server::final_stat_log() {
+    if (stopping_ and sessions_.empty()) {
+        logger_.log("server", logger_levels::e_info, "Server stopped total statistic: {}", completed_server_statistics_);
+    }
+}
+
 boost::cobalt::task<void>server::accept() {
+    std::size_t cycle = 0;
     while (not stopping_) {
         auto [error, socket] = co_await boost::cobalt::as_tuple(acceptor_->accept());
         if (stopping_)
@@ -44,23 +51,37 @@ boost::cobalt::task<void>server::accept() {
                 }
                 session->cancel();
             }
+            auto session_stats = session->statistics();
+            append_session_statistic(session_stats);
             logger_.log("session", logger_levels::e_info, "Session [session id: {} username: {}] statistic: [{}]",
-                        session->session_id(), session->username(), session->statistics());
+                        session->session_id(), session->username(), session_stats);
             sessions_.erase(it);
+            final_stat_log();
         });
+        if (++cycle % 100 == 0) {
+            logger_.log("server", logger_levels::e_info, "Current completed sessions statistics: {}", completed_server_statistics_);
+        }
     }
+}
+
+void server::append_session_statistic(const session::statistics &statistics) {
+    completed_server_statistics_.socks_tx.fetch_add(statistics.socks_tx, std::memory_order::relaxed);
+    completed_server_statistics_.socks_rx.fetch_add(statistics.socks_rx, std::memory_order::relaxed);
+    completed_server_statistics_.bytes_client_to_upstream.fetch_add(statistics.bytes_client_to_upstream, std::memory_order::relaxed);
+    completed_server_statistics_.bytes_upstream_to_client.fetch_add(statistics.bytes_upstream_to_client, std::memory_order::relaxed);
+    completed_server_statistics_.total_created_sessions.fetch_add(1, std::memory_order::relaxed);
 }
 
 void server::cancel() {
     if (std::exchange(stopping_, true)) {
         return;
     }
-    logger_.log("server", logger_levels::e_info, "Stopped server");
     acceptor_.reset();
 
     for (const auto& session : sessions_) {
         session->cancel();
     }
+    final_stat_log();
 }
 
 std::expected<std::unique_ptr<runtime>, std::string> runtime::create(const config& config, logger::logger& logger) {
