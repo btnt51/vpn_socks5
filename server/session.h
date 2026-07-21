@@ -57,6 +57,8 @@ private:
 
     boost::cobalt::promise<bool> send_success_socks5_connect();
 
+    std::array<std::uint8_t, 10> prepare_socks5_failed_command(const boost::system::error_code& connect_ec);
+
     boost::cobalt::promise<bool> resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint);
 
     boost::cobalt::promise<void> handle_error_while_connecting_to_remote(const boost::system::error_code& connect_ec);

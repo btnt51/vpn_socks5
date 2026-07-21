@@ -327,7 +327,7 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
         g_logger.log("session", logger_levels::e_warning,
                          "session id: {} username: {} upstream connection doesn`t have local endpoint: {}",
                          session_id_, username_, ep.error().message());
-        auto response = socks5::build_failed_command_response(socks5::to_reply_code(ep.error()));
+        auto response = prepare_socks5_failed_command(ep.error());
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
@@ -346,6 +346,11 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
         } else {
             response = socks5::build_success_command_response(socks5::reply_code::succeeded, std::span(addr), ip->port());
         }
+
+        g_logger.log("session", logger_levels::e_info,
+            "session id: {} username: {} sending socks5 succeeded command response failed reply code: {:02x}",
+            session_id_, username_, static_cast<uint8_t>(socks5::reply_code::succeeded));
+
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
@@ -363,6 +368,15 @@ boost::cobalt::promise<bool> session::send_success_socks5_connect() {
     co_return false;
 }
 
+std::array<std::uint8_t, 10> session::prepare_socks5_failed_command(const boost::system::error_code& connect_ec) {
+    auto reply_code = socks5::to_reply_code(connect_ec);
+    auto response = socks5::build_failed_command_response(reply_code);
+    g_logger.log("session", logger_levels::e_warning,
+                 "session id: {} username: {} sending socks5 failed command response failed reply code: {:02x}",
+                 session_id_, username_, static_cast<uint8_t>(reply_code));
+    return response;
+}
+
 boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5::domain_endpoint& domain_endpoint) {
     set_session_state(session_states::e_resolve);
     g_logger.log("session", logger_levels::e_info,
@@ -374,7 +388,7 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
         g_logger.log("session", logger_levels::e_warning,
             "session id: {} username: {} error while resolving domain_endpoint: {} error: {}",
             session_id_, username_, domain_endpoint.host, err.message());
-        auto response = socks5::build_failed_command_response(socks5::to_reply_code(err));
+        auto response = prepare_socks5_failed_command(err);
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
@@ -391,7 +405,7 @@ boost::cobalt::promise<bool> session::resolve_and_connect_to_remote(const socks5
         g_logger.log("session", logger_levels::e_warning,
             "session id: {} username: {} error while trying to connect domain_endpoint: {} error: {}",
             session_id_, username_, domain_endpoint.host, connect_ec.message());
-        auto response = socks5::build_failed_command_response(socks5::to_reply_code(connect_ec));
+        auto response = prepare_socks5_failed_command(connect_ec);
         auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
         if (write_ec) {
             g_logger.log("session", logger_levels::e_warning,
@@ -412,7 +426,7 @@ boost::cobalt::promise<void> session::handle_error_while_connecting_to_remote(co
     g_logger.log("session", logger_levels::e_warning,
                  "session id: {} username: {} error while connecting to remote: {}",
                  session_id_, username_, connect_ec.message());
-    auto response = socks5::build_failed_command_response(socks5::to_reply_code(connect_ec));
+    auto response = prepare_socks5_failed_command(connect_ec);
     auto [write_ec, written] = co_await asio_coro_utils::help_socket_writer(client_connection_, response);
     if (write_ec) {
         g_logger.log("session", logger_levels::e_warning,
