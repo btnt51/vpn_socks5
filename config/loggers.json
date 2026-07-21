@@ -1,0 +1,20 @@
+{
+  "loggers":[
+    {
+      "module_name": "session",
+      "filename": "session.log",
+      "pattern":"[%Y-%m-%d %H:%M:%S.%e] [%n] [%t] [%l] %v",
+      "level": "debug",
+      "rotation_hour": 12,
+      "rotation_minute": 5
+    },
+    {
+      "module_name": "server",
+      "filename": "server.log",
+      "pattern":"[%Y-%m-%d %H:%M:%S.%e] [%n] [%t] [%l] %v",
+      "level": "debug",
+      "rotation_hour": 12,
+      "rotation_minute": 5
+    }
+  ]
+}
