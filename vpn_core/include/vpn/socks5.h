@@ -6,6 +6,8 @@
 #include <span>
 #include <variant>
 #include <vector>
+#include <string_view>
+
 #include <boost/asio/ip/tcp.hpp>
 
 

@@ -1,8 +1,8 @@
-#include "server.h"
+#include <vpn/server.h>
 
 #include <iostream>
 
-#include "logger.h"
+#include <vpn/logger.h>
 #include "session.h"
 
 #include <boost/cobalt/spawn.hpp>

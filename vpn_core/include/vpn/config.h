@@ -2,8 +2,8 @@
 #define VPN_CONFIG_H
 #include <expected>
 #include <filesystem>
-#include "logger.h"
-#include "server.h"
+#include <vpn/logger.h>
+#include <vpn/server.h>
 
 namespace config {
 std::expected<logger::loggers_settings, std::string> load_logger_config_file(const std::filesystem::path &config_folder_path = "./config/");

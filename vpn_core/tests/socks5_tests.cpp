@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include "server/socks5.h"
+#include <vpn/socks5.h>
 
 namespace {
 
@@ -270,4 +270,4 @@ TEST(Socks5CommandResponse, BuildsIpv6SuccessReply) {
     EXPECT_EQ(response[21], 0xbb);
 }
 
-} // namespace
+}  // namespace

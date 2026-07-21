@@ -9,7 +9,7 @@
 #include <boost/cobalt/promise.hpp>
 #include <boost/cobalt/task.hpp>
 
-#include "socks5.h"
+#include <vpn/socks5.h>
 #include "boost/cobalt/io/resolver.hpp"
 #include "boost/cobalt/io/stream_socket.hpp"
 

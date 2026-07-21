@@ -5,8 +5,8 @@
 #include <ranges>
 #include <boost/asio/connect.hpp>
 
-#include "logger.h"
-#include "socks5.h"
+#include <vpn/logger.h>
+#include <vpn/socks5.h>
 #include "utils.h"
 #include <boost/cobalt/io/socket.hpp>
 #include <boost/cobalt/gather.hpp>

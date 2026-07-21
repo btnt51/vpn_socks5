@@ -71,65 +71,12 @@ FetchContent_MakeAvailable(spdlog)
 
 target_link_libraries(spdlog PUBLIC fmt::fmt)
 
-add_executable(vpn main.cpp
-        server/server.cpp
-        server/server.h
-        server/session.cpp
-        server/session.h
-        server/logger.cpp
-        server/logger.h
-        server/socks5.cpp
-        server/socks5.h
-        server/utils.h
-        server/config.cpp
-        server/config.h)
-add_custom_target(cobalt_vpn DEPENDS vpn)
-target_link_libraries(
-        vpn
-        PRIVATE
-        Boost::asio
-        Boost::beast
-        Boost::cobalt::io
-        Boost::program_options
-        spdlog::spdlog
-        Boost::json
-        Threads::Threads
-)
-
 if(VPN_BUILD_TESTS)
     FetchContent_MakeAvailable(googletest)
-
     enable_testing()
-
-    add_executable(vpn_socks5_tests
-            tests/socks5_tests.cpp
-            server/socks5.cpp
-            server/socks5.h
-    )
-    target_include_directories(vpn_socks5_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(
-            vpn_socks5_tests
-            PRIVATE
-            Boost::asio
-            Boost::json
-            GTest::gtest_main
-    )
-
-    include(GoogleTest)
-    gtest_discover_tests(vpn_socks5_tests)
-
-    add_executable(vpn_config_tests
-            tests/config_tests.cpp
-            server/config.cpp
-            server/config.h
-    )
-    target_include_directories(vpn_config_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(
-            vpn_config_tests
-            PRIVATE
-            Boost::json
-            spdlog::spdlog
-            GTest::gtest_main
-    )
-    gtest_discover_tests(vpn_config_tests)
 endif()
+
+add_subdirectory(vpn_core)
+
+add_executable(vpn main.cpp)
+target_link_libraries(vpn PRIVATE vpn_core)

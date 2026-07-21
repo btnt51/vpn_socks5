@@ -1,4 +1,4 @@
-#include "socks5.h"
+#include <vpn/socks5.h>
 
 #include <algorithm>
 #include <cstring>

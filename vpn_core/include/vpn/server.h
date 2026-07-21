@@ -1,6 +1,11 @@
 #ifndef VPN_SERVER_H
 #define VPN_SERVER_H
+#include <cstdint>
+#include <memory>
 #include <optional>
+#include <string>
+#include <vector>
+
 #include <boost/cobalt/task.hpp>
 #include <boost/cobalt/io/acceptor.hpp>
 

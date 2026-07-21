@@ -5,9 +5,9 @@
 #include <boost/cobalt/this_thread.hpp>
 #include "boost/asio/co_spawn.hpp"
 #include "boost/asio/detached.hpp"
-#include "server/config.h"
-#include "server/logger.h"
-#include "server/server.h"
+#include <vpn/config.h>
+#include <vpn/logger.h>
+#include <vpn/server.h>
 #include "spdlog/async.h"
 
 

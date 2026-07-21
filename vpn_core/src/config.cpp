@@ -1,4 +1,4 @@
-#include "config.h"
+#include <vpn/config.h>
 
 #include <fstream>
 #include <set>
@@ -292,16 +292,25 @@ std::expected<server::config, std::string> parse_and_validate_json_server_config
     if (not obj.contains("ip")) {
         return std::unexpected{fmt::format("must contains 'ip'")};
     }
-    if (auto ip = obj.if_contains("ip"); ip->as_string().empty()) {
+    auto ip = obj.if_contains("ip");
+    if (not ip->is_string()) {
+        return std::unexpected{fmt::format("'ip' must be a string ipv4 or ipv6 format")};
+    }
+    if (ip->as_string().empty()) {
         return std::unexpected{fmt::format("'ip' must not be empty")};
     }
+
     if (not obj.contains("port")) {
         return std::unexpected{fmt::format("must contains 'port'")};
     }
     auto port = obj.if_contains("port");
+    if (not port->is_int64()) {
+        return std::unexpected{fmt::format("'port' must be an integer in range [0, 65535]")};
+    }
     if (port->as_int64() < 0 or port->as_int64() > 65535) {
         return std::unexpected{fmt::format("'port' must be in range [0, 65535]")};
     }
+
     try {
         return boost::json::value_to<server::config>(object);
     } catch (const std::exception& e) {
@@ -319,6 +328,9 @@ std::expected<server::config, std::string> parse_json(const boost::json::value &
 
     if (server_value == nullptr) {
         return std::unexpected{"Required field '$.server' is missing"};
+    }
+    if (not server_value->is_object()) {
+        return std::unexpected{fmt::format("'server' must be an object")};
     }
     auto config = parse_and_validate_json_server_config_object(*server_value);
     if (not config) {
@@ -371,7 +383,7 @@ std::expected<server::config, std::string> config::load_server_config_file(const
     }
     auto config_path = std::filesystem::path{config_folder_path/"server.json"};
     if (not std::filesystem::exists(config_path)) {
-        return std::unexpected{fmt::format("Logger`s config `{}` does not exist", config_path.string())};
+        return std::unexpected{fmt::format("Server`s config `{}` does not exist", config_path.string())};
     }
     return read_json_file(config_path).and_then([](const boost::json::value& json) {
         return server_config::parse_json(json);
@@ -380,5 +392,4 @@ std::expected<server::config, std::string> config::load_server_config_file(const
         return validate_and_return(std::move(configs));
     });
 }
-
 

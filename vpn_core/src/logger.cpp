@@ -1,4 +1,4 @@
-#include "logger.h"
+#include <vpn/logger.h>
 
 #include <ranges>
 #include <spdlog/spdlog.h>
