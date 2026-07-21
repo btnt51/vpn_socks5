@@ -117,4 +117,19 @@ if(VPN_BUILD_TESTS)
 
     include(GoogleTest)
     gtest_discover_tests(vpn_socks5_tests)
+
+    add_executable(vpn_config_tests
+            tests/config_tests.cpp
+            server/config.cpp
+            server/config.h
+    )
+    target_include_directories(vpn_config_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(
+            vpn_config_tests
+            PRIVATE
+            Boost::json
+            spdlog::spdlog
+            GTest::gtest_main
+    )
+    gtest_discover_tests(vpn_config_tests)
 endif()
