@@ -8,7 +8,7 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin" AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Build native Apple Silicon binaries")
 endif()
 
-project(vpn LANGUAGES CXX)
+project(vpn LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,8 +66,21 @@ FetchContent_Declare(
         GIT_SHALLOW TRUE
 )
 
+FetchContent_Declare(
+        sqlite3
+        URL https://www.sqlite.org/2026/sqlite-amalgamation-3530300.zip
+        URL_HASH SHA3_256=d45c688a8cb23f68611a894a756a12d7eb6ab6e9e2468ca70adbeab3808b5ab9
+)
+
 FetchContent_MakeAvailable(boost fmt)
 FetchContent_MakeAvailable(spdlog)
+FetchContent_MakeAvailable(sqlite3)
+
+add_library(sqlite3 STATIC "${sqlite3_SOURCE_DIR}/sqlite3.c")
+add_library(SQLite::SQLite3 ALIAS sqlite3)
+
+target_include_directories(sqlite3 PUBLIC "${sqlite3_SOURCE_DIR}")
+target_link_libraries(sqlite3 PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 
 target_link_libraries(spdlog PUBLIC fmt::fmt)
 
@@ -77,6 +90,7 @@ if(VPN_BUILD_TESTS)
 endif()
 
 add_subdirectory(vpn_core)
+add_subdirectory(tester)
 
 add_executable(vpn main.cpp)
 target_link_libraries(vpn PRIVATE vpn_core)

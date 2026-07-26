@@ -24,6 +24,7 @@ target_link_libraries(
         Boost::asio
         Boost::cobalt::io
         Boost::json
+        SQLite::SQLite3
         spdlog::spdlog
         Threads::Threads
 )
