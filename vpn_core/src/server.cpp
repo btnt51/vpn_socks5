@@ -6,11 +6,12 @@
 #include "session.h"
 
 #include <boost/cobalt/spawn.hpp>
+#include "../include/vpn/worker_pool.h"
 
 namespace server {
 using namespace boost::cobalt::io;
 server::server(boost::cobalt::executor io_context, const config& config, logger::logger& logger) : io_context_(std::move(io_context)),
-    acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_), logger_(logger) {
+    acceptor_(std::in_place, endpoint{tcp, config.address, config.port}, io_context_), logger_(logger), worker_pool_(config.threads, logger_) {
     logger_.log("server", logger_levels::e_info,
                 "Server acceptor started at ip: {}, port: {}", config.address, config.port);
 }
@@ -20,56 +21,53 @@ server::~server() {
 }
 
 void server::final_stat_log() {
-    if (stopping_ and sessions_.empty()) {
+    if (stopping_) {
         logger_.log("server", logger_levels::e_info, "Server stopped total statistic: {}", completed_server_statistics_);
     }
+}
+
+void server::append_workers_statistics() {
+    auto temp_stat = worker_pool_.get_statistics();
+    completed_server_statistics_.socks_rx.fetch_add(temp_stat.socks_rx, std::memory_order_relaxed);
+    completed_server_statistics_.socks_tx.fetch_add(temp_stat.socks_tx, std::memory_order_relaxed);
+    completed_server_statistics_.bytes_client_to_upstream.fetch_add(temp_stat.bytes_client_to_upstream, std::memory_order_relaxed);
+    completed_server_statistics_.bytes_upstream_to_client.fetch_add(temp_stat.bytes_upstream_to_client, std::memory_order_relaxed);
+    completed_server_statistics_.total_created_sessions.fetch_add(temp_stat.amount_of_sessions, std::memory_order_relaxed);
 }
 
 boost::cobalt::task<void>server::accept() {
     std::size_t cycle = 0;
     while (not stopping_) {
-        auto [error, socket] = co_await boost::cobalt::as_tuple(acceptor_->accept());
-        if (stopping_)
-            break;
+        worker* selected_worker = &worker_pool_.get_next_worker();
+        boost::cobalt::io::stream_socket socket{selected_worker->get_executor()};
+        auto [error] = co_await boost::cobalt::as_tuple(acceptor_->accept(socket));
         if (error) {
+            selected_worker->release_session();
             logger_.log("server", logger_levels::e_warning,
                 "Could not accept connection from acceptor with error: {}" ,error.message());
-            continue;
-        }
-        auto session = std::make_shared<::session::session>(io_context_, std::move(socket), logger_);
-        auto it = sessions_.insert(sessions_.end(), session);
-        logger_.log("server", logger_levels::e_info,
-                "Accepting new session session id: {} username: {}", session->session_id(), session->username());
-        boost::cobalt::spawn(io_context_, session->run(), [this, session, it](const std::exception_ptr &ep) mutable {
-            if (ep) {
-                try {
-                    std::rethrow_exception(ep);
-                } catch (std::exception& e) {
-                    logger_.log("session", logger_levels::e_warning,
-                        "While session [session id: {} username: {}] was running there was thrown an exception: {}",
-                        session->session_id(), session->username(), e.what());
-                }
-                session->cancel();
+            if (not stopping_) {
+                continue;
+            } else {
+                break;
             }
-            auto session_stats = session->statistics();
-            append_session_statistic(session_stats);
-            logger_.log("session", logger_levels::e_info, "Session [session id: {} username: {}] statistic: [{}]",
-                        session->session_id(), session->username(), session_stats);
-            sessions_.erase(it);
-            final_stat_log();
-        });
-        if (++cycle % 100 == 0) {
-            logger_.log("server", logger_levels::e_info, "Current completed sessions statistics: {}", completed_server_statistics_);
         }
-    }
-}
+        boost::cobalt::spawn(selected_worker->get_executor(), selected_worker->run_session(std::move(socket)),
+        [this, selected_worker](std::exception_ptr error) {
+            selected_worker->release_session();
+            if (not error) {
+                return;
+            }
 
-void server::append_session_statistic(const session::statistics &statistics) {
-    completed_server_statistics_.socks_tx.fetch_add(statistics.socks_tx, std::memory_order::relaxed);
-    completed_server_statistics_.socks_rx.fetch_add(statistics.socks_rx, std::memory_order::relaxed);
-    completed_server_statistics_.bytes_client_to_upstream.fetch_add(statistics.bytes_client_to_upstream, std::memory_order::relaxed);
-    completed_server_statistics_.bytes_upstream_to_client.fetch_add(statistics.bytes_upstream_to_client, std::memory_order::relaxed);
-    completed_server_statistics_.total_created_sessions.fetch_add(1, std::memory_order::relaxed);
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception& exception) {
+                logger_.log("worker", logger_levels::e_error,
+                    "Unhandled exception in worker #{}: {}", selected_worker->get_id(), exception.what());
+            } catch (...) {
+                logger_.log("worker", logger_levels::e_error, "Unknown exception in worker #{}", selected_worker->get_id());
+            }
+        });
+    }
 }
 
 void server::cancel() {
@@ -77,10 +75,8 @@ void server::cancel() {
         return;
     }
     acceptor_.reset();
-
-    for (const auto& session : sessions_) {
-        session->cancel();
-    }
+    append_workers_statistics();
+    worker_pool_.stop();
     final_stat_log();
 }
 
@@ -105,7 +101,7 @@ int runtime::run() {
 
     io_context_.run();
 
-    if (!failure_) {
+    if (not failure_) {
         return 0;
     }
 

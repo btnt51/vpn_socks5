@@ -25,9 +25,14 @@ logger_config tag_invoke(boost::json::value_to_tag<logger_config>, boost::json::
 namespace server {
 config tag_invoke(boost::json::value_to_tag<config>, boost::json::value const& jv ) {
     boost::json::object const& obj = jv.as_object();
+    int workers = 1;
+    if (obj.contains("workers")) {
+        workers = value_to<int>(obj.at("workers"));
+    }
     return config {
-        value_to<std::string>(obj.at("ip")),
-        value_to<std::uint16_t>(obj.at("port")),
+        .address = value_to<std::string>(obj.at("ip")),
+        .port = value_to<std::uint16_t>(obj.at("port")),
+        .threads = workers
     };
 }
 }
@@ -321,6 +326,16 @@ std::expected<server::config, std::string> parse_and_validate_json_server_config
     }
     if (port->as_int64() < 0 or port->as_int64() > 65535) {
         return std::unexpected{fmt::format("'port' must be in range [0, 65535]")};
+    }
+
+    if (obj.contains("workers")) {
+        auto workers = obj.if_contains("workers");
+        if (not workers->is_int64()) {
+            return std::unexpected{fmt::format("'workers' must be an integer in range [1, 65535]")};
+        }
+        if (workers->as_int64() < 1 or workers->as_int64() > 65535) {
+            return std::unexpected{fmt::format("'workers' must be in range [1, 65535]")};
+        }
     }
 
     try {

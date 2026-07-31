@@ -11,6 +11,7 @@
 #include <boost/cobalt/io/acceptor.hpp>
 
 #include <vpn/logger.h>
+#include <vpn/worker_pool.h>
 
 namespace session{
 struct statistics;
@@ -20,6 +21,7 @@ namespace server {
 struct config {
     std::string address;
     std::uint16_t port;
+    int threads{1};
 };
 
 struct statistics {
@@ -40,16 +42,14 @@ public:
 
     void cancel();
 private:
-    void append_session_statistic(const session::statistics& statistics);
-
     void final_stat_log();
-
+    void append_workers_statistics();
     boost::cobalt::executor io_context_;
     std::optional<boost::cobalt::io::acceptor> acceptor_;
-    std::list<std::shared_ptr<session::session>> sessions_;
     logger::logger& logger_;
     statistics completed_server_statistics_;
     bool stopping_{false};
+    worker_pool worker_pool_;
 };
 
 class runtime {

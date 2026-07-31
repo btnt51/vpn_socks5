@@ -10,6 +10,10 @@ add_library(vpn_core
         src/utils.h
         src/config.cpp
         include/vpn/config.h
+        src/worker.cpp
+        src/worker.h
+        src/worker_pool.cpp
+        include/vpn/worker_pool.h
 )
 
 target_include_directories(

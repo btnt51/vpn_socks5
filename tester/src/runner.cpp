@@ -538,6 +538,10 @@ shard_result runner::build_result(std::vector<endpoint_result> endpoint_results)
 }
 
 run_summary run_tester(const scenario_registry& scenarios, run_config config) {
+    auto configured_scenarios = scenarios;
+    if (config.payload_size) {
+        set_payload_size(configured_scenarios,*config.payload_size);
+    }
     const auto shard_configs = split_config(config);
     const auto started_at = clock::now() + std::chrono::milliseconds{100};
     const auto measurement_start = started_at + config.warmup;
@@ -570,7 +574,7 @@ run_summary run_tester(const scenario_registry& scenarios, run_config config) {
     for (std::size_t index = 0; index < shard_configs.size();++index) {
         threads.emplace_back([&,index] {
             try {
-                outcomes[index].result = run_shard(scenarios, shard_configs[index], index, started_at, runner_callbacks{
+                outcomes[index].result = run_shard(configured_scenarios, shard_configs[index], index, started_at, runner_callbacks{
                     .connection_started = [&] {
                         statistics.connection_started();
                     },
@@ -630,7 +634,7 @@ run_summary run_tester(const scenario_registry& scenarios, run_config config) {
     for (const auto& selected_workload : config.workloads) {
         selected_scenarios.push_back(selected_workload.scenario_name);
     }
-    return build_summary(scenarios, selected_scenarios, config.duration.has_value(), std::move(client_results),
+    return build_summary(configured_scenarios, selected_scenarios, config.duration.has_value(), std::move(client_results),
         std::move(endpoint_results), std::move(infrastructure_errors), control.stop_signal.load());
 }
 

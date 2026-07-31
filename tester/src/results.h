@@ -29,6 +29,7 @@ struct client_result {
 
     bool success{};
     std::size_t failed_step{};
+    std::string failed_step_name;
 
     std::uint64_t bytes_sent{};
     std::uint64_t bytes_received{};

@@ -16,6 +16,14 @@
       "level": "debug",
       "rotation_hour": 12,
       "rotation_minute": 5
+    },
+    {
+      "module_name": "worker",
+      "filename": "worker.log",
+      "pattern":"[%Y-%m-%d %H:%M:%S.%e] [%n] [%t] [%l] %v",
+      "level": "debug",
+      "rotation_hour": 12,
+      "rotation_minute": 5
     }
   ]
 }

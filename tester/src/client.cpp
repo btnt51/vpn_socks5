@@ -88,6 +88,7 @@ boost::cobalt::promise<client_result> client::run() {
     auto connect_result = co_await wait_with_timeout(connect_proxy(), connect_timeout, "proxy connection timeout");
     if (not connect_result) {
         result_.failed_step = 0;
+        result_.failed_step_name = "connect-proxy";
         result_.error = connect_result.error();
         result_.latency = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started_at);
         co_return result_;
@@ -97,6 +98,7 @@ boost::cobalt::promise<client_result> client::run() {
         const auto now = std::chrono::steady_clock::now();
         if (now >= session_deadline) {
             result_.failed_step = current_step_;
+            result_.failed_step_name = step_name(context_.selected_scenario.client_steps[current_step_]);
             result_.termination = termination_reason::timeout;
             result_.error = "session timeout";
             result_.latency = std::chrono::duration_cast<std::chrono::microseconds>(now - started_at);
@@ -118,6 +120,7 @@ boost::cobalt::promise<client_result> client::run() {
                 result_.termination = termination_reason::protocol_error;
             }
             result_.failed_step = current_step_;
+            result_.failed_step_name = step_name(context_.selected_scenario.client_steps[current_step_]);
             result_.error = step_result.error();
             result_.latency =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started_at);
             co_return result_;

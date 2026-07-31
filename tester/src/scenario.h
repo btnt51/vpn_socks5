@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -69,6 +70,8 @@ using client_step = std::variant<
     expect_complete_download
 >;
 
+std::string_view step_name(const client_step& step);
+
 struct pong_behavior {
     unsigned status{200};
     std::string body{"pong"};
@@ -124,5 +127,6 @@ using scenario_registry = std::map<
 >;
 
 const scenario_registry& scenarios();
+void set_payload_size(scenario_registry& scenarios, std::uint64_t payload_size);
 
 } // namespace tester

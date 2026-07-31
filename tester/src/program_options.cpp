@@ -28,6 +28,37 @@ std::expected<std::size_t, std::string> parse_size(std::string_view value, std::
     return result;
 }
 
+std::expected<std::uint64_t, std::string> parse_byte_size(std::string_view value) {
+    const auto suffix_at = value.find_first_not_of("0123456789");
+    const auto number = value.substr(0,suffix_at);
+    const auto suffix = suffix_at == std::string_view::npos ? std::string_view{} : value.substr(suffix_at);
+    std::uint64_t parsed{};
+    const auto [end,error] = std::from_chars(number.data(),number.data() + number.size(),parsed);
+    if (number.empty() or error != std::errc{} or end != number.data() + number.size()) {
+        return std::unexpected{fmt::format("invalid payload size: {}",value)};
+    }
+
+    std::uint64_t multiplier{1};
+    if (suffix.empty() or suffix == "B") {
+        multiplier = 1;
+    } else if (suffix == "KiB") {
+        multiplier = 1024ULL;
+    } else if (suffix == "MiB") {
+        multiplier = 1024ULL * 1024ULL;
+    } else if (suffix == "GiB") {
+        multiplier = 1024ULL * 1024ULL * 1024ULL;
+    } else {
+        return std::unexpected{fmt::format("invalid payload size '{}', expected suffix B, KiB, MiB or GiB",value)};
+    }
+    if (parsed == 0) {
+        return std::unexpected{"payload size must be greater than zero"};
+    }
+    if (parsed > std::numeric_limits<std::uint64_t>::max() / multiplier / 2) {
+        return std::unexpected{"payload size is too large"};
+    }
+    return parsed * multiplier;
+}
+
 std::expected<std::chrono::milliseconds, std::string> parse_duration(std::string_view value, std::string_view name, bool allow_zero) {
     const auto suffix_at = value.find_first_not_of("0123456789");
     const auto number = value.substr(0, suffix_at);
@@ -106,6 +137,7 @@ program_options::program_options() : options_{"Options"} {
         ("proxy-port", po::value<unsigned int>()->default_value(1080), "SOCKS5 proxy port")
         ("source-address", po::value<std::vector<std::string>>()->composing(), "local source IP address, may be repeated")
         ("duration", po::value<std::string>(), "measurement duration, for example 30s or 5m")
+        ("payload-size", po::value<std::string>(), "download payload size, for example 64KiB, 10MiB or 1GiB")
         ("rate", po::value<std::size_t>(), "maximum number of new connections per second")
         ("threads", po::value<std::size_t>()->default_value(1), "number of independent network threads")
         ("warmup", po::value<std::string>()->default_value("0s"), "warm-up duration excluded from statistics")
@@ -194,6 +226,13 @@ std::expected<settings, std::string> program_options::parse(int argc, char* argv
                 return std::unexpected{"rate must be greater than zero"};
             }
             result.config.connection_rate = rate;
+        }
+        if (variables.contains("payload-size")) {
+            auto payload_size = parse_byte_size(variables["payload-size"].as<std::string>());
+            if (not payload_size) {
+                return std::unexpected{payload_size.error()};
+            }
+            result.config.payload_size = *payload_size;
         }
         result.config.threads = variables["threads"].as<std::size_t>();
         if (result.config.threads == 0) {

@@ -61,9 +61,9 @@ void print_summary(const tester::run_summary& summary) {
         }
         ++total_errors;
         if (printed_errors < maximum_error_details) {
-            fmt::println("  {} {} step={} termination={} error={}",
+            fmt::println("  {} {} step={} step-index={} termination={} error={}",
                 result.termination == tester::termination_reason::resource_exhausted ? "INFRASTRUCTURE" : "FAIL", result.run_id,
-                result.failed_step, tester::to_string(result.termination), result.error);
+                result.failed_step_name, result.failed_step, tester::to_string(result.termination), result.error);
             ++printed_errors;
         }
     }

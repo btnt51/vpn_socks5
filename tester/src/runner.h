@@ -38,6 +38,7 @@ struct run_config {
     std::vector<workload> workloads;
     std::optional<std::chrono::milliseconds> duration;
     std::optional<std::size_t> connection_rate;
+    std::optional<std::uint64_t> payload_size;
     std::chrono::milliseconds warmup{};
     std::chrono::milliseconds report_interval{1'000};
     std::chrono::milliseconds failure_backoff{100};
