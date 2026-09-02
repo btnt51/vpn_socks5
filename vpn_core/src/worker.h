@@ -5,7 +5,7 @@
 
 #include "session.h"
 #include <vpn/logger.h>
-#include <__thread/jthread.h>
+#include <thread>
 
 struct statistics {
     std::uint64_t socks_rx{};

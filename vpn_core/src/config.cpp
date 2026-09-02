@@ -328,13 +328,18 @@ std::expected<server::config, std::string> parse_and_validate_json_server_config
         return std::unexpected{fmt::format("'port' must be in range [0, 65535]")};
     }
 
-    if (obj.contains("workers")) {
-        auto workers = obj.if_contains("workers");
+    if (obj.contains("worker_threads")) {
+        const auto detected = std::thread::hardware_concurrency();
+        constexpr std::int64_t fallback_max_workers = 64;
+        const auto max_workers = detected == 0
+            ? fallback_max_workers
+            : static_cast<std::int64_t>(detected);
+        auto workers = obj.if_contains("worker_threads");
         if (not workers->is_int64()) {
-            return std::unexpected{fmt::format("'workers' must be an integer in range [1, 65535]")};
+            return std::unexpected{fmt::format("'worker_threads' must be an integer in range [1, {}]", max_workers)};
         }
-        if (workers->as_int64() < 1 or workers->as_int64() > 65535) {
-            return std::unexpected{fmt::format("'workers' must be in range [1, 65535]")};
+        if (workers->as_int64() < 1 or workers->as_int64() > max_workers) {
+            return std::unexpected{fmt::format("'worker_threads' must be in range [1, {}]", max_workers)};
         }
     }
 
